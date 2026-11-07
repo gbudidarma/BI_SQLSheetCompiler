@@ -134,24 +134,76 @@ html, body, #root {
   background-color: #e2e8f0 !important;
 }
 
-/* Blue tinted pill / selected row overrides in bright mode */
-[data-theme="bright"] .bg-blue-950,
-[data-theme="bright"] .bg-blue-950\/40,
-[data-theme="bright"] .bg-blue-900\/20,
-[data-theme="bright"] .bg-blue-900\/30,
-.theme-bright .bg-blue-950,
-.theme-bright .bg-blue-950\/40,
-.theme-bright .bg-blue-900\/20,
-.theme-bright .bg-blue-900\/30 {
+/* Blue / Sky / Tinted pill / button overrides in bright mode */
+[data-theme="bright"] [class*="bg-blue-950"],
+[data-theme="bright"] [class*="bg-blue-900"],
+[data-theme="bright"] [class*="bg-sky-950"],
+[data-theme="bright"] [class*="bg-sky-900"],
+[data-theme="bright"] [class*="bg-cyan-950"],
+[data-theme="bright"] [class*="bg-cyan-900"],
+[data-theme="bright"] [class*="bg-indigo-950"],
+[data-theme="bright"] [class*="bg-indigo-900"],
+.theme-bright [class*="bg-blue-950"],
+.theme-bright [class*="bg-blue-900"],
+.theme-bright [class*="bg-sky-950"],
+.theme-bright [class*="bg-sky-900"],
+.theme-bright [class*="bg-cyan-950"],
+.theme-bright [class*="bg-cyan-900"],
+.theme-bright [class*="bg-indigo-950"],
+.theme-bright [class*="bg-indigo-900"] {
   background-color: #eff6ff !important;
+}
+
+[data-theme="bright"] [class*="bg-emerald-950"],
+[data-theme="bright"] [class*="bg-emerald-900"],
+[data-theme="bright"] [class*="bg-teal-950"],
+[data-theme="bright"] [class*="bg-teal-900"],
+.theme-bright [class*="bg-emerald-950"],
+.theme-bright [class*="bg-emerald-900"],
+.theme-bright [class*="bg-teal-950"],
+.theme-bright [class*="bg-teal-900"] {
+  background-color: #ecfdf5 !important;
+}
+
+[data-theme="bright"] [class*="bg-amber-950"],
+[data-theme="bright"] [class*="bg-amber-900"],
+.theme-bright [class*="bg-amber-950"],
+.theme-bright [class*="bg-amber-900"] {
+  background-color: #fffbeb !important;
+}
+
+[data-theme="bright"] [class*="bg-rose-950"],
+[data-theme="bright"] [class*="bg-rose-900"],
+.theme-bright [class*="bg-rose-950"],
+.theme-bright [class*="bg-rose-900"] {
+  background-color: #fff1f2 !important;
+}
+
+[data-theme="bright"] [class*="bg-purple-950"],
+[data-theme="bright"] [class*="bg-purple-900"],
+[data-theme="bright"] [class*="bg-violet-950"],
+[data-theme="bright"] [class*="bg-violet-900"],
+.theme-bright [class*="bg-purple-950"],
+.theme-bright [class*="bg-purple-900"],
+.theme-bright [class*="bg-violet-950"],
+.theme-bright [class*="bg-violet-900"] {
+  background-color: #f5f3ff !important;
 }
 
 /* Borders in Bright Mode */
 [data-theme="bright"] [class*="border-[#1"],
 [data-theme="bright"] [class*="border-[#2"],
+[data-theme="bright"] [class*="border-blue-800"],
+[data-theme="bright"] [class*="border-blue-900"],
+[data-theme="bright"] [class*="border-sky-800"],
+[data-theme="bright"] [class*="border-sky-900"],
 .theme-bright [class*="border-[#1"],
-.theme-bright [class*="border-[#2"] {
-  border-color: #e2e8f0 !important;
+.theme-bright [class*="border-[#2"],
+.theme-bright [class*="border-blue-800"],
+.theme-bright [class*="border-blue-900"],
+.theme-bright [class*="border-sky-800"],
+.theme-bright [class*="border-sky-900"] {
+  border-color: #cbd5e1 !important;
 }
 
 /* Text Hierarchy in Bright Mode (preserving primary buttons) */

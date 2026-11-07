@@ -487,15 +487,19 @@ export const SqlEditor: React.FC<SqlEditorProps> = ({
             }}
             className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md transition whitespace-nowrap cursor-pointer ${
               autoSuggestEnabled
-                ? 'text-blue-300 bg-blue-950/70 border border-blue-800/60 hover:bg-blue-900/60'
-                : 'text-slate-400 bg-[#0f1b36] hover:bg-[#14244a] border border-[#1b315e]/50'
+                ? isBright
+                  ? 'text-blue-700 bg-blue-100 hover:bg-blue-200 border border-blue-300 shadow-xs'
+                  : 'text-blue-300 bg-blue-950/70 border border-blue-800/60 hover:bg-blue-900/60'
+                : isBright
+                  ? 'text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-300'
+                  : 'text-slate-400 bg-[#0f1b36] hover:bg-[#14244a] border border-[#1b315e]/50'
             }`}
             title="Toggle SQL Autocomplete & suggestions as you type (Ctrl + Space to trigger)"
           >
             {autoSuggestEnabled ? (
-              <Zap className="w-3.5 h-3.5 text-blue-400" />
+              <Zap className={`w-3.5 h-3.5 ${isBright ? 'text-blue-600' : 'text-blue-400'}`} />
             ) : (
-              <ZapOff className="w-3.5 h-3.5 text-slate-500" />
+              <ZapOff className={`w-3.5 h-3.5 ${isBright ? 'text-slate-400' : 'text-slate-500'}`} />
             )}
             <span className="hidden md:inline">
               Auto-Suggest: {autoSuggestEnabled ? 'ON' : 'OFF'}
@@ -508,12 +512,16 @@ export const SqlEditor: React.FC<SqlEditorProps> = ({
             onClick={() => setSyntaxColoringEnabled(!syntaxColoringEnabled)}
             className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md transition whitespace-nowrap cursor-pointer ${
               syntaxColoringEnabled
-                ? 'text-sky-300 bg-sky-950/60 border border-sky-800/60 hover:bg-sky-900/60'
-                : 'text-slate-400 bg-[#0f1b36] hover:bg-[#14244a] border border-[#1b315e]/50'
+                ? isBright
+                  ? 'text-sky-800 bg-sky-100 hover:bg-sky-200 border border-sky-300 shadow-xs'
+                  : 'text-sky-300 bg-sky-950/60 border border-sky-800/60 hover:bg-sky-900/60'
+                : isBright
+                  ? 'text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-300'
+                  : 'text-slate-400 bg-[#0f1b36] hover:bg-[#14244a] border border-[#1b315e]/50'
             }`}
             title="Toggle VS Code Dark+ syntax highlighting colors"
           >
-            <Palette className="w-3.5 h-3.5 text-sky-400" />
+            <Palette className={`w-3.5 h-3.5 ${isBright ? 'text-sky-600' : 'text-sky-400'}`} />
             <span className="hidden lg:inline">VS Code Syntax</span>
           </button>
 
