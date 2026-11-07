@@ -396,23 +396,6 @@ export const TopBar: React.FC<TopBarProps> = ({
             />
           </a>
 
-          {/* Pro License Button / Status Badge */}
-          {onOpenProModal && (
-            <button
-              type="button"
-              onClick={onOpenProModal}
-              className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg text-xs font-bold transition cursor-pointer shadow-xs ${
-                isPro
-                  ? 'bg-amber-400 hover:bg-amber-300 text-slate-950 font-black'
-                  : 'bg-gradient-to-r from-pink-600 via-indigo-600 to-purple-600 hover:opacity-90 text-white'
-              }`}
-              title={isPro ? 'SheetSQL Pro Active (PostgreSQL Unlocked)' : 'Unlock SheetSQL Pro on Ko-fi'}
-            >
-              <Sparkles className={`w-3.5 h-3.5 ${isPro ? 'fill-current' : 'text-amber-300'}`} />
-              <span>{isPro ? 'PRO' : 'PRO'}</span>
-            </button>
-          )}
-
           {/* Dark Mode and Bright Mode Selector */}
           <div
             role="group"

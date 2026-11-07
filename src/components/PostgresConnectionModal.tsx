@@ -113,15 +113,6 @@ export const PostgresConnectionModal: React.FC<PostgresConnectionModalProps> = (
 
   // Run Test Connection
   const handleTestConnection = async () => {
-    if (config.mode !== 'demo' && !isProUnlocked()) {
-      setTestResult({
-        success: false,
-        latencyMs: 0,
-        error: 'Connecting to live PostgreSQL databases (Localhost, Neon, Supabase) is a Pro feature. Instant Demo mode is free, or unlock Pro with a Ko-fi license key.',
-      });
-      return;
-    }
-
     setIsTesting(true);
     setTestResult(null);
     try {
@@ -144,15 +135,6 @@ export const PostgresConnectionModal: React.FC<PostgresConnectionModalProps> = (
 
   // Fetch Tables
   const handleFetchTables = async () => {
-    if (config.mode !== 'demo' && !isProUnlocked()) {
-      setTestResult({
-        success: false,
-        latencyMs: 0,
-        error: 'Live PostgreSQL inspection requires a Pro License Key. You can use the Instant Demo profiles for free, or unlock Pro.',
-      });
-      return;
-    }
-
     setIsFetchingTables(true);
     try {
       const tables = await fetchPostgresTables(config);
@@ -266,22 +248,6 @@ export const PostgresConnectionModal: React.FC<PostgresConnectionModalProps> = (
                 <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
                   DBeaver Style
                 </span>
-                {isProUnlocked() ? (
-                  <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-400 text-slate-900 flex items-center gap-1 shadow-xs">
-                    💎 PRO
-                  </span>
-                ) : (
-                  onOpenProModal && (
-                    <button
-                      type="button"
-                      onClick={onOpenProModal}
-                      className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gradient-to-r from-pink-500 to-indigo-500 text-white flex items-center gap-1 cursor-pointer hover:opacity-90 shadow-xs transition-opacity"
-                      title="Unlock SheetSQL Pro on Ko-fi"
-                    >
-                      <span>💎 Unlock Pro</span>
-                    </button>
-                  )
-                )}
               </div>
               <p className={`text-[11px] ${isBright ? 'text-slate-500' : 'text-slate-400'}`}>
                 Localhost, Neon, Supabase, RDS, or instant browser profiles

@@ -156,19 +156,10 @@ const STORAGE_KEY = 'sheetsql_pro_license_v1';
 
 /**
  * Check if the user has an active Pro license
+ * (Temporarily unlocked for all users for testing)
  */
 export function isProUnlocked(): boolean {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (!stored) return false;
-
-    const data = JSON.parse(stored);
-    if (!data.key) return false;
-
-    return verifyLicenseKey(data.key).valid;
-  } catch {
-    return false;
-  }
+  return true;
 }
 
 /**
