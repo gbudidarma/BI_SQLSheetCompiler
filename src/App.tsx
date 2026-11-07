@@ -562,7 +562,7 @@ export default function App() {
       </div>
 
       {/* Footer */}
-      <footer className="shrink-0 h-8 px-4 flex items-center justify-between text-xs border-t border-[#162544] bg-[#070e1c] text-slate-400 select-none z-10 mb-14 md:mb-0">
+      <footer className="shrink-0 h-9 px-4 flex items-center justify-between text-xs border-t border-[#162544] bg-[#070e1c] text-slate-400 select-none z-10 mb-14 md:mb-0">
         <div className="hidden sm:flex items-center gap-2 truncate">
           <span className="font-semibold text-slate-300">SheetSQL Compiler</span>
           <span className="text-slate-600">•</span>
@@ -573,12 +573,12 @@ export default function App() {
             target="_blank"
             rel="noopener noreferrer"
             className="hover:opacity-85 transition-opacity inline-flex items-center ml-0.5"
-            title="Support on Ko-fi"
+            title="Buy Me a Coffee at ko-fi.com"
           >
             <img
-              src="https://ko-fi.com/img/githubbutton_sm.svg"
-              alt="ko-fi"
-              className="h-4.5"
+              src="https://storage.ko-fi.com/cdn/kofi5.png?v=6"
+              alt="Buy Me a Coffee at ko-fi.com"
+              className="h-6 object-contain"
             />
           </a>
         </div>
@@ -588,12 +588,12 @@ export default function App() {
             target="_blank"
             rel="noopener noreferrer"
             className="sm:hidden hover:opacity-85 transition-opacity inline-flex items-center mr-1"
-            title="Support on Ko-fi"
+            title="Buy Me a Coffee at ko-fi.com"
           >
             <img
-              src="https://ko-fi.com/img/githubbutton_sm.svg"
-              alt="ko-fi"
-              className="h-4"
+              src="https://storage.ko-fi.com/cdn/kofi5.png?v=6"
+              alt="Buy Me a Coffee at ko-fi.com"
+              className="h-5.5 object-contain"
             />
           </a>
           <span>© {new Date().getFullYear()}</span>

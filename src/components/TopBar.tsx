@@ -358,12 +358,12 @@ export const TopBar: React.FC<TopBarProps> = ({
             target="_blank"
             rel="noopener noreferrer"
             className="hidden xl:inline-flex items-center hover:opacity-85 transition-opacity shrink-0"
-            title="Support on Ko-fi"
+            title="Buy Me a Coffee at ko-fi.com"
           >
             <img
-              src="https://ko-fi.com/img/githubbutton_sm.svg"
-              alt="ko-fi"
-              className="h-6"
+              src="https://storage.ko-fi.com/cdn/kofi5.png?v=6"
+              alt="Buy Me a Coffee at ko-fi.com"
+              className="h-8 object-contain"
             />
           </a>
 
@@ -504,12 +504,12 @@ export const TopBar: React.FC<TopBarProps> = ({
               target="_blank"
               rel="noopener noreferrer"
               className="hover:opacity-85 transition-opacity inline-flex items-center"
-              title="Support on Ko-fi"
+              title="Buy Me a Coffee at ko-fi.com"
             >
               <img
-                src="https://ko-fi.com/img/githubbutton_sm.svg"
-                alt="ko-fi"
-                className="h-5"
+                src="https://storage.ko-fi.com/cdn/kofi5.png?v=6"
+                alt="Buy Me a Coffee at ko-fi.com"
+                className="h-7 object-contain"
               />
             </a>
           </div>

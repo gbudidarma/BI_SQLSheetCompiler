@@ -2,7 +2,7 @@
 
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-gbudidarma.github.io%2FBI__SQLSheetCompiler-2563eb?style=for-the-badge&logo=github)](https://gbudidarma.github.io/BI_SQLSheetCompiler/)
 [![GitHub Pages](https://img.shields.io/badge/GitHub%20Pages-Active-success?style=for-the-badge)](https://gbudidarma.github.io/BI_SQLSheetCompiler/)
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/V7V2JM8S4)
+<a href='https://ko-fi.com/V7V2JM8S4' target='_blank'><img height='36' style='border:0px;height:36px;' src='https://storage.ko-fi.com/cdn/kofi5.png?v=6' border='0' alt='Buy Me a Coffee at ko-fi.com' /></a>
 
 🌐 **Live Demo Website:** [https://gbudidarma.github.io/BI_SQLSheetCompiler/](https://gbudidarma.github.io/BI_SQLSheetCompiler/)
 
@@ -81,7 +81,7 @@ Created by **[@gbudidarma](https://instagram.com/gbudidarma)**.
 
 If you like this project or find it useful, consider supporting its development:
 
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/V7V2JM8S4)
+<a href='https://ko-fi.com/V7V2JM8S4' target='_blank'><img height='36' style='border:0px;height:36px;' src='https://storage.ko-fi.com/cdn/kofi5.png?v=6' border='0' alt='Buy Me a Coffee at ko-fi.com' /></a>
 
 ---
 
