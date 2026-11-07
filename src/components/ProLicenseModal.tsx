@@ -106,11 +106,11 @@ export const ProLicenseModal: React.FC<ProLicenseModalProps> = ({
           </div>
 
           <h2 className="text-xl font-extrabold tracking-tight flex items-center gap-2">
-            <span>Unlock SheetSQL Pro</span>
+            <span>Unlock Unlimited Tables</span>
             <span className="text-amber-300">💎</span>
           </h2>
           <p className="text-xs text-blue-100 mt-1 leading-relaxed">
-            Direct PostgreSQL connections, TCP Bridge proxy, and unlimited multi-database SQL querying.
+            Free tier allows up to 2 tables. Upgrade to Pro for unlimited Excel sheets, CSVs, and PostgreSQL tables!
           </p>
         </div>
 
@@ -121,11 +121,10 @@ export const ProLicenseModal: React.FC<ProLicenseModalProps> = ({
             <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 space-y-3">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-                <span className="font-bold text-sm">SheetSQL Pro is Active</span>
+                <span className="font-bold text-sm">SheetSQL Pro is Active (Unlimited Tables)</span>
               </div>
               <p className="text-[11px] text-slate-300">
-                You have permanent access to all Pro features, including the live PostgreSQL DBeaver
-                connector and local TCP Bridge.
+                You have permanent access to all Pro features with no table or file limits. Load as many Excel sheets, CSVs, and PostgreSQL tables as you need!
               </p>
               {status.key && (
                 <div className="font-mono text-xs px-2.5 py-1.5 rounded bg-black/30 text-emerald-200 border border-emerald-500/20 truncate">
@@ -164,11 +163,11 @@ export const ProLicenseModal: React.FC<ProLicenseModalProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
                   <div className="flex items-start gap-1.5 text-slate-300">
                     <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                    <span>Real PostgreSQL (Localhost, Neon, Supabase, RDS)</span>
+                    <span className="font-semibold text-emerald-300">Unlimited Tables & Sheets (Free limit: 2)</span>
                   </div>
                   <div className="flex items-start gap-1.5 text-slate-300">
                     <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                    <span>Full TCP Bridge Companion script</span>
+                    <span>Real PostgreSQL (Localhost, Neon, Supabase, RDS)</span>
                   </div>
                   <div className="flex items-start gap-1.5 text-slate-300">
                     <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />

@@ -32,6 +32,7 @@ import {
 import { parseSheetData, sanitizeSqlIdentifier } from './utils/excelParser';
 import { SAMPLE_DATASETS } from './utils/sampleData';
 import { exportToExcel } from './utils/exportHelper';
+import { FREE_TABLE_LIMIT, isProUnlocked } from './utils/licenseManager';
 
 export default function App() {
   const [activeView, setActiveView] = useState<AppViewTab>('studio');
@@ -92,9 +93,11 @@ export default function App() {
   // Load a sample dataset into AlaSQL and the React state
   const loadSampleDataset = useCallback((datasetId: string) => {
     const dataset = SAMPLE_DATASETS.find((d) => d.id === datasetId) || SAMPLE_DATASETS[0];
+    const isPro = isProUnlocked();
+    const tablesToLoad = isPro ? dataset.tables : dataset.tables.slice(0, FREE_TABLE_LIMIT);
     const newSchemas: TableSchema[] = [];
 
-    dataset.tables.forEach((tbl) => {
+    tablesToLoad.forEach((tbl) => {
       // Register in AlaSQL engine
       registerTable(tbl.tableName, tbl.data);
 
@@ -117,6 +120,10 @@ export default function App() {
     // Set starter query
     if (dataset.starterQueries.length > 0) {
       setQuery(dataset.starterQueries[0].sql);
+    }
+
+    if (!isPro && dataset.tables.length > FREE_TABLE_LIMIT) {
+      setIsProModalOpen(true);
     }
   }, []);
 
@@ -192,36 +199,52 @@ export default function App() {
     setActiveView('comparator');
   }, []);
 
-  // When files are uploaded
+  // When files are uploaded or tables imported
   const handleTablesLoaded = (
     newItems: { schema: TableSchema; rows: Record<string, any>[] }[]
   ) => {
-    newItems.forEach((item) => {
-      registerTable(item.schema.name, item.rows);
-    });
+    const isPro = isProUnlocked();
+    const existingNames = new Set(newItems.map((n) => n.schema.name));
+    const currentOtherTables = tables.filter((t) => !existingNames.has(t.name));
+    const totalPotential = currentOtherTables.length + newItems.length;
 
-    setTables((prev) => {
-      // Replace existing table if same name or append
-      const existingNames = new Set(newItems.map((n) => n.schema.name));
-      const filtered = prev.filter((t) => !existingNames.has(t.name));
-      return [
-        ...filtered,
-        ...newItems.map((n) => ({
-          ...n.schema,
-          allRows: n.rows,
-        })),
-      ];
-    });
+    let itemsToLoad = newItems;
+    let hitLimit = false;
 
-    if (newItems.length > 0) {
-      const firstTbl = newItems[0].schema.name;
+    if (!isPro && totalPotential > FREE_TABLE_LIMIT) {
+      hitLimit = true;
+      const allowedCapacity = Math.max(0, FREE_TABLE_LIMIT - currentOtherTables.length);
+      itemsToLoad = newItems.slice(0, allowedCapacity);
+    }
+
+    if (itemsToLoad.length > 0) {
+      itemsToLoad.forEach((item) => {
+        registerTable(item.schema.name, item.rows);
+      });
+
+      setTables((prev) => {
+        const loadedNames = new Set(itemsToLoad.map((n) => n.schema.name));
+        const filtered = prev.filter((t) => !loadedNames.has(t.name));
+        return [
+          ...filtered,
+          ...itemsToLoad.map((n) => ({
+            ...n.schema,
+            allRows: n.rows,
+          })),
+        ];
+      });
+
+      const firstTbl = itemsToLoad[0].schema.name;
       const initialQuery = `SELECT * FROM ${firstTbl} LIMIT 50;`;
       setQuery(initialQuery);
-      // Auto run first query
       setTimeout(() => {
         const res = executeQuery(initialQuery, [firstTbl]);
         setQueryResult(res);
       }, 50);
+    }
+
+    if (hitLimit) {
+      setIsProModalOpen(true);
     }
   };
 
@@ -361,6 +384,7 @@ export default function App() {
                 onLoadSample={loadSampleDataset}
                 onOpenUpload={() => setIsUploadOpen(true)}
                 onOpenPostgres={() => setIsPostgresOpen(true)}
+                onOpenProModal={() => setIsProModalOpen(true)}
                 onOpenVisualizer={(tblName) => {
                   setVisualizerInitialTable(tblName);
                   setActiveView('visualizer');

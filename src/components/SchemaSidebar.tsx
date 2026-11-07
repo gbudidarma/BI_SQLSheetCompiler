@@ -18,6 +18,7 @@ import {
 import { TableSchema } from '../types';
 import { SAMPLE_DATASETS } from '../utils/sampleData';
 import { useTheme } from '../context/ThemeContext';
+import { isProUnlocked, FREE_TABLE_LIMIT } from '../utils/licenseManager';
 
 interface SchemaSidebarProps {
   tables: TableSchema[];
@@ -29,6 +30,7 @@ interface SchemaSidebarProps {
   onLoadSample: (datasetId: string) => void;
   onOpenUpload: () => void;
   onOpenPostgres?: () => void;
+  onOpenProModal?: () => void;
   onOpenVisualizer?: (tableName: string) => void;
 }
 
@@ -42,6 +44,7 @@ export const SchemaSidebar: React.FC<SchemaSidebarProps> = ({
   onLoadSample,
   onOpenUpload,
   onOpenPostgres,
+  onOpenProModal,
   onOpenVisualizer,
 }) => {
   const { isBright } = useTheme();
@@ -99,13 +102,32 @@ export const SchemaSidebar: React.FC<SchemaSidebarProps> = ({
         isBright ? 'bg-white border-slate-200' : 'bg-[#091224] border-[#162544]'
       }`}>
         <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <Database className="w-4 h-4 text-blue-500" />
             <span className={`text-xs font-semibold tracking-wide uppercase ${
               isBright ? 'text-slate-800' : 'text-slate-200'
             }`}>
               SQL Schema
             </span>
+            {isProUnlocked() ? (
+              <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30">
+                💎 Unlimited
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={onOpenProModal}
+                className={`text-[9px] font-mono px-1.5 py-0.2 rounded border transition cursor-pointer flex items-center gap-1 ${
+                  tables.length >= FREE_TABLE_LIMIT
+                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30 font-bold'
+                    : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200'
+                }`}
+                title={`Free plan limit: ${FREE_TABLE_LIMIT} tables. Click to unlock Unlimited Tables.`}
+              >
+                <span>{tables.length}/{FREE_TABLE_LIMIT}</span>
+                {tables.length >= FREE_TABLE_LIMIT && <span className="text-[8px] uppercase">Pro</span>}
+              </button>
+            )}
           </div>
           <div className="flex items-center gap-1.5">
             {onOpenPostgres && (
@@ -145,6 +167,23 @@ export const SchemaSidebar: React.FC<SchemaSidebarProps> = ({
           />
         </div>
       </div>
+
+      {/* Table limit banner when at 2 tables */}
+      {!isProUnlocked() && tables.length >= FREE_TABLE_LIMIT && onOpenProModal && (
+        <div className="mx-2 mt-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-[11px] text-amber-300 flex items-center justify-between shadow-xs">
+          <div className="flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span>Table limit reached (2/2)</span>
+          </div>
+          <button
+            type="button"
+            onClick={onOpenProModal}
+            className="font-bold underline text-amber-200 hover:text-white cursor-pointer ml-1 shrink-0"
+          >
+            Unlock 💎
+          </button>
+        </div>
+      )}
 
       {/* Tables List */}
       <div className="flex-1 overflow-y-auto p-2 space-y-1.5">

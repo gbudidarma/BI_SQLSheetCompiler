@@ -153,13 +153,31 @@ export function verifyLicenseKey(rawKey: string): { valid: boolean; error?: stri
 }
 
 const STORAGE_KEY = 'sheetsql_pro_license_v1';
+export const FREE_TABLE_LIMIT = 2;
 
 /**
  * Check if the user has an active Pro license
- * (Temporarily unlocked for all users for testing)
  */
 export function isProUnlocked(): boolean {
-  return true;
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (!stored) return false;
+
+    const data = JSON.parse(stored);
+    if (!data.key) return false;
+
+    return verifyLicenseKey(data.key).valid;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Check if user can add more tables based on their plan
+ */
+export function canAddTables(currentCount: number, addingCount = 1): boolean {
+  if (isProUnlocked()) return true;
+  return currentCount + addingCount <= FREE_TABLE_LIMIT;
 }
 
 /**

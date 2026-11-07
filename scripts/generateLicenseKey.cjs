@@ -106,9 +106,9 @@ if (count === 1) {
   console.log(`License Key: ${key}`);
   console.log(`\nHow to activate:`);
   console.log(`1. Open https://gbudidarma.github.io/BI_SQLSheetCompiler/`);
-  console.log(`2. Click the "+ Postgres" button in the schema sidebar or the 💎 Pro button.`);
+  console.log(`2. Click the "💎 PRO" button in the header or the upgrade banner in the sidebar.`);
   console.log(`3. Enter your License Key and click "Activate Pro".`);
-  console.log(`4. Enjoy permanent access to live PostgreSQL database connections! 🚀\n`);
+  console.log(`4. Enjoy permanent access to UNLIMITED tables, multi-sheet files, and PostgreSQL databases! 🚀\n`);
 } else {
   console.log(`\x1b[32m✔ Generated ${count} Pro License Keys (Batch for Ko-fi Shop):\x1b[0m\n`);
   keys.forEach((k, idx) => {
