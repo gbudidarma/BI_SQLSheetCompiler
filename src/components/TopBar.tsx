@@ -346,6 +346,22 @@ export const TopBar: React.FC<TopBarProps> = ({
                   <div className="text-[10px] text-slate-400">Past executed queries</div>
                 </div>
               </button>
+
+              <div className="my-1 border-t border-[#162544]" />
+
+              {/* Creator Credit in More Menu */}
+              <div className="px-2.5 py-1.5 flex items-center justify-between text-[11px] text-slate-400">
+                <span>© {new Date().getFullYear()}</span>
+                <a
+                  href="https://instagram.com/gbudidarma"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-pink-400 hover:text-pink-300 font-medium inline-flex items-center gap-1 transition-colors"
+                >
+                  <Instagram className="w-3 h-3" />
+                  <span>@gbudidarma</span>
+                </a>
+              </div>
             </div>
           )}
         </div>
@@ -743,22 +759,6 @@ export const MobileBottomNav: React.FC<{
             <span className="absolute bottom-0.5 w-1 h-1 rounded-full bg-violet-400" />
           )}
         </button>
-      </div>
-
-      {/* Copyright Footer (rendered after navigation on mobile) */}
-      <div className="flex items-center justify-center gap-1.5 py-1 text-[10px] text-slate-400 border-t border-[#182747]/80 select-none">
-        <span>© {new Date().getFullYear()}</span>
-        <a
-          href="https://instagram.com/gbudidarma"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-pink-400 hover:text-pink-300 font-medium inline-flex items-center gap-1 transition-colors group"
-          title="Follow @gbudidarma on Instagram"
-        >
-          <Instagram className="w-3 h-3 transition-transform group-hover:scale-110" />
-          <span className="group-hover:underline">@gbudidarma</span>
-        </a>
-        <span>All rights reserved.</span>
       </div>
     </nav>
   );

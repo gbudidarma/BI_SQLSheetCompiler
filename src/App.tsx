@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { TopBar, AppViewTab, MobileBottomNav } from './components/TopBar';
-import { Database, Table as TableIcon, Code2, Instagram } from 'lucide-react';
+import { Database, Table as TableIcon, Code2 } from 'lucide-react';
 import { SchemaSidebar } from './components/SchemaSidebar';
 import { SqlEditor } from './components/SqlEditor';
 import { ResultsViewer } from './components/ResultsViewer';
@@ -560,43 +560,6 @@ export default function App() {
           </div>
         )}
       </div>
-
-      {/* Desktop Footer (On mobile, footer is rendered inside MobileBottomNav after navigation) */}
-      <footer className="hidden md:flex shrink-0 h-8 px-4 items-center justify-between text-xs border-t border-[#162544] bg-[#070e1c] text-slate-400 select-none z-30">
-        <div className="flex items-center gap-2 truncate">
-          <span className="font-semibold text-slate-300">SheetSQL Compiler</span>
-          <span className="text-slate-600">•</span>
-          <span className="text-slate-400">In-Browser SQL & BI Studio</span>
-          <span className="text-slate-600">•</span>
-          <a
-            href="https://ko-fi.com/V7V2JM8S4"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hover:opacity-85 transition-opacity inline-flex items-center ml-0.5"
-            title="Buy Me a Coffee at ko-fi.com"
-          >
-            <img
-              src="https://storage.ko-fi.com/cdn/kofi5.png?v=6"
-              alt="Buy Me a Coffee at ko-fi.com"
-              className="h-5 object-contain"
-            />
-          </a>
-        </div>
-        <div className="flex items-center gap-1.5 shrink-0 text-xs">
-          <span>© {new Date().getFullYear()}</span>
-          <a
-            href="https://instagram.com/gbudidarma"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-pink-400 hover:text-pink-300 font-medium inline-flex items-center gap-1 transition-colors group"
-            title="Follow @gbudidarma on Instagram"
-          >
-            <Instagram className="w-3.5 h-3.5 transition-transform group-hover:scale-110" />
-            <span className="group-hover:underline">@gbudidarma</span>
-          </a>
-          <span>All rights reserved.</span>
-        </div>
-      </footer>
 
       {/* Modals & Dialogs */}
       <UploadModal
