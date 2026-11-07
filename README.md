@@ -1,4 +1,9 @@
-# SheetSQL Compiler
+# SheetSQL Compiler (BI_SQLSheetCompiler)
+
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-gbudidarma.github.io%2FBI__SQLSheetCompiler-2563eb?style=for-the-badge&logo=github)](https://gbudidarma.github.io/BI_SQLSheetCompiler/)
+[![GitHub Pages](https://img.shields.io/badge/GitHub%20Pages-Active-success?style=for-the-badge)](https://gbudidarma.github.io/BI_SQLSheetCompiler/)
+
+🌐 **Live Demo Website:** [https://gbudidarma.github.io/BI_SQLSheetCompiler/](https://gbudidarma.github.io/BI_SQLSheetCompiler/)
 
 **SheetSQL Compiler** is a client-side SQL analytics, data modeling, BI engineering, and time-series forecasting web application. Run SQL directly against spreadsheets (Excel `.xlsx` and CSV) right inside the browser with zero database setup required.
 
@@ -6,7 +11,7 @@
 
 ## 🚀 Key Features
 
-- **SQL Studio**: Execute ANSI-style SQL queries on in-memory tables powered by AlaSQL. Features syntax highlighting, query history, quick code snippets, and instant result export.
+- **SQL Studio**: Execute ANSI-style SQL queries on in-memory tables powered by AlaSQL. Features syntax highlighting, query history, quick code snippets, intelligent auto-suggest, and instant result export.
 - **Data Modeler (ERD)**: Interactive Entity-Relationship Diagram generator with automatic key detection, visual schema exploration, and drag-and-drop join builder.
 - **Schema & Data Comparator**: Side-by-side table schema comparisons and row diffing to spot structural discrepancies between files or versions.
 - **Duplicate Checker**: Deep duplicate analysis across single or composite keys with one-click deduplication and clean table export.
@@ -20,10 +25,11 @@
 ## 🛠️ Tech Stack
 
 - **Framework**: React 19 + TypeScript + Vite
-- **Styling**: Tailwind CSS (Dark Mode & Bright Mode support)
+- **Styling**: Tailwind CSS (Default Dark Mode & Bright Mode support)
 - **SQL Engine**: AlaSQL (100% in-browser SQL execution)
 - **File Parsing**: SheetJS (`xlsx`), JSZip, PapaParse
 - **Icons**: Lucide React
+- **Deployment**: GitHub Pages via GitHub Actions (Bun)
 
 ---
 
@@ -31,34 +37,42 @@
 
 ### Prerequisites
 
-- Node.js (v18+) or Bun / pnpm / yarn
+- Node.js (v18+) or [Bun](https://bun.sh/)
 
 ### Installation & Development
 
 1. **Clone the repository:**
    ```bash
-   git clone <YOUR_GITHUB_REPO_URL>
-   cd SheetSQL-Compiler
+   git clone https://github.com/gbudidarma/BI_SQLSheetCompiler.git
+   cd BI_SQLSheetCompiler
    ```
 
 2. **Install dependencies:**
    ```bash
-   npm install
-   # or
    bun install
+   # or
+   npm install
    ```
 
 3. **Start the development server:**
    ```bash
-   npm run dev
-   # or
    bun run dev
+   # or
+   npm run dev
    ```
 
 4. **Build for production:**
    ```bash
+   bun run build
+   # or
    npm run build
    ```
+
+---
+
+## 👤 Author
+
+Created by **[@gbudidarma](https://instagram.com/gbudidarma)**.
 
 ---
 
