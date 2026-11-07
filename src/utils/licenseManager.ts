@@ -6,8 +6,11 @@
  * Handles client-side Pro feature unlocking via Ko-fi shop activation keys.
  */
 
-// Must match the salt in scripts/generateLicenseKey.cjs
-export const LICENSE_SALT = 'SSQL_KOFI_PRO_KEY_SALT_v1_2026';
+// Obfuscated verification vector
+const _V = [9, 50, 57, 35, 41, 54, 203, 205, 219, 198, 240, 245, 225, 234, 247, 134, 147, 142, 139, 158, 170, 185, 171, 141, 51, 86, 34, 39, 44, 19];
+function _k(): string {
+  return _V.map((b, i) => String.fromCharCode(b ^ ((0x5a + i * 7) & 0xff))).join('');
+}
 export const KOFI_SHOP_URL = 'https://ko-fi.com/s/9b3a2aa6fe';
 
 export interface LicenseStatus {
@@ -104,7 +107,7 @@ function sha256Sync(ascii: string): string {
  * Compute 4-character hex checksum from raw payload + salt
  */
 export function computeChecksum(payload: string): string {
-  const hash = sha256Sync(`${payload}:${LICENSE_SALT}`);
+  const hash = sha256Sync(`${payload}:${_k()}`);
   return hash.substring(0, 4).toUpperCase();
 }
 
@@ -119,11 +122,6 @@ export function verifyLicenseKey(rawKey: string): { valid: boolean; error?: stri
 
   const clean = rawKey.trim().toUpperCase().replace(/\s+/g, '');
   const parts = clean.split('-');
-
-  // Master demo / VIP keys for testing
-  if (clean === 'SSQL-PRO-VIP-2026' || clean === 'SSQL-PRO-EARLY-ACCESS') {
-    return { valid: true };
-  }
 
   if (parts.length !== 5) {
     return {

@@ -5,18 +5,61 @@
  * 
  * SheetSQL Compiler - Pro License Key Generator
  * Generates tamper-proof activation keys for Ko-fi shop buyers.
+ * Requires owner secret in local .env file (SSQL_LICENSE_SECRET).
  * 
  * Usage:
- *   node scripts/generateLicenseKey.js
- *   node scripts/generateLicenseKey.js --count=5
- *   node scripts/generateLicenseKey.js --user="customer@email.com"
  *   npm run gen-key
+ *   node scripts/generateLicenseKey.cjs --count=5
+ *   node scripts/generateLicenseKey.cjs --user="customer@email.com"
  */
 
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 
-// Shared secret salt (must match src/utils/licenseManager.ts)
-const LICENSE_SALT = 'SSQL_KOFI_PRO_KEY_SALT_v1_2026';
+// Load local .env if present (never committed to GitHub)
+function loadLocalSecret() {
+  if (process.env.SSQL_LICENSE_SECRET) {
+    return process.env.SSQL_LICENSE_SECRET.trim();
+  }
+  const envPath = path.resolve(__dirname, '..', '.env');
+  if (fs.existsSync(envPath)) {
+    const content = fs.readFileSync(envPath, 'utf8');
+    for (const line of content.split(/\r?\n/)) {
+      const match = line.match(/^\s*SSQL_LICENSE_SECRET\s*=\s*(.+)\s*$/);
+      if (match) {
+        return match[1].trim().replace(/^['"]|['"]$/g, '');
+      }
+    }
+  }
+  return null;
+}
+
+// Parse CLI arguments
+const args = process.argv.slice(2);
+let count = 1;
+let customer = '';
+let cliSecret = null;
+
+for (const arg of args) {
+  if (arg.startsWith('--count=')) {
+    count = parseInt(arg.replace('--count=', ''), 10) || 1;
+  } else if (arg.startsWith('--user=')) {
+    customer = arg.replace('--user=', '');
+  } else if (arg.startsWith('--secret=')) {
+    cliSecret = arg.replace('--secret=', '').trim();
+  } else if (!isNaN(parseInt(arg, 10))) {
+    count = parseInt(arg, 10);
+  }
+}
+
+const LICENSE_SALT = cliSecret || loadLocalSecret();
+
+if (!LICENSE_SALT) {
+  console.error('\n\x1b[31m[Access Denied]\x1b[0m Missing owner secret (SSQL_LICENSE_SECRET).');
+  console.error('This script requires your private .env file to generate valid license keys.\n');
+  process.exit(1);
+}
 
 /**
  * Compute 4-character hex checksum from raw payload + salt
@@ -67,21 +110,6 @@ function validateKey(key) {
   const payload = `${parts[2]}${parts[3]}`;
   const expectedChecksum = computeChecksum(payload);
   return parts[4] === expectedChecksum;
-}
-
-// Parse CLI arguments
-const args = process.argv.slice(2);
-let count = 1;
-let customer = '';
-
-for (const arg of args) {
-  if (arg.startsWith('--count=')) {
-    count = parseInt(arg.replace('--count=', ''), 10) || 1;
-  } else if (arg.startsWith('--user=')) {
-    customer = arg.replace('--user=', '');
-  } else if (!isNaN(parseInt(arg, 10))) {
-    count = parseInt(arg, 10);
-  }
 }
 
 console.log(`\n\x1b[1m\x1b[35m============================================================\x1b[0m`);
