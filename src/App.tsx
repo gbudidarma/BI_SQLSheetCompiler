@@ -567,8 +567,35 @@ export default function App() {
           <span className="font-semibold text-slate-300">SheetSQL Compiler</span>
           <span className="text-slate-600">•</span>
           <span className="text-slate-400">In-Browser SQL & BI Studio</span>
+          <span className="text-slate-600">•</span>
+          <a
+            href="https://ko-fi.com/V7V2JM8S4"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:opacity-85 transition-opacity inline-flex items-center ml-0.5"
+            title="Support on Ko-fi"
+          >
+            <img
+              src="https://ko-fi.com/img/githubbutton_sm.svg"
+              alt="ko-fi"
+              className="h-4.5"
+            />
+          </a>
         </div>
-        <div className="flex items-center gap-1.5 shrink-0 w-full sm:w-auto justify-center sm:justify-end">
+        <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-center sm:justify-end">
+          <a
+            href="https://ko-fi.com/V7V2JM8S4"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="sm:hidden hover:opacity-85 transition-opacity inline-flex items-center mr-1"
+            title="Support on Ko-fi"
+          >
+            <img
+              src="https://ko-fi.com/img/githubbutton_sm.svg"
+              alt="ko-fi"
+              className="h-4"
+            />
+          </a>
           <span>© {new Date().getFullYear()}</span>
           <a
             href="https://instagram.com/gbudidarma"

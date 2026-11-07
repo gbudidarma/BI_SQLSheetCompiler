@@ -2,6 +2,7 @@
 
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-gbudidarma.github.io%2FBI__SQLSheetCompiler-2563eb?style=for-the-badge&logo=github)](https://gbudidarma.github.io/BI_SQLSheetCompiler/)
 [![GitHub Pages](https://img.shields.io/badge/GitHub%20Pages-Active-success?style=for-the-badge)](https://gbudidarma.github.io/BI_SQLSheetCompiler/)
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/V7V2JM8S4)
 
 🌐 **Live Demo Website:** [https://gbudidarma.github.io/BI_SQLSheetCompiler/](https://gbudidarma.github.io/BI_SQLSheetCompiler/)
 
@@ -73,6 +74,14 @@
 ## 👤 Author
 
 Created by **[@gbudidarma](https://instagram.com/gbudidarma)**.
+
+---
+
+## ☕ Support
+
+If you like this project or find it useful, consider supporting its development:
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/V7V2JM8S4)
 
 ---
 

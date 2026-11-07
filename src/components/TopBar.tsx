@@ -352,6 +352,21 @@ export const TopBar: React.FC<TopBarProps> = ({
 
         {/* Zone 3: Dark/Bright Theme Select & Actions */}
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          {/* Ko-fi Support Button */}
+          <a
+            href="https://ko-fi.com/V7V2JM8S4"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hidden xl:inline-flex items-center hover:opacity-85 transition-opacity shrink-0"
+            title="Support on Ko-fi"
+          >
+            <img
+              src="https://ko-fi.com/img/githubbutton_sm.svg"
+              alt="ko-fi"
+              className="h-6"
+            />
+          </a>
+
           {/* Dark Mode and Bright Mode Selector */}
           <div
             role="group"
@@ -479,6 +494,24 @@ export const TopBar: React.FC<TopBarProps> = ({
             <span className="font-semibold text-blue-400 uppercase tracking-wider text-[11px] bg-blue-950/70 border border-blue-800/60 px-2 py-0.5 rounded">
               {activeView === 'studio' ? 'SQL Studio' : activeView === 'modeler' ? 'Data Modeler' : activeView === 'comparator' ? 'Comparator' : activeView === 'duplicates' ? 'Duplicate Checker' : activeView === 'visualizer' ? 'Visualizer' : 'BI Schema'}
             </span>
+          </div>
+
+          {/* Ko-fi Support Link in Mobile Drawer */}
+          <div className="mt-2.5 pt-2 border-t border-[#162544] flex items-center justify-between">
+            <span className="text-[11px] text-slate-400">Support Creator:</span>
+            <a
+              href="https://ko-fi.com/V7V2JM8S4"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:opacity-85 transition-opacity inline-flex items-center"
+              title="Support on Ko-fi"
+            >
+              <img
+                src="https://ko-fi.com/img/githubbutton_sm.svg"
+                alt="ko-fi"
+                className="h-5"
+              />
+            </a>
           </div>
 
           {/* Copyright & Instagram Footer */}
