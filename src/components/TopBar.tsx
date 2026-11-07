@@ -351,19 +351,19 @@ export const TopBar: React.FC<TopBarProps> = ({
         </div>
 
         {/* Zone 3: Dark/Bright Theme Select & Actions */}
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-          {/* Ko-fi Support Button */}
+        <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+          {/* Ko-fi Support Button (visible in header across mobile and desktop) */}
           <a
             href="https://ko-fi.com/V7V2JM8S4"
             target="_blank"
             rel="noopener noreferrer"
-            className="hidden xl:inline-flex items-center hover:opacity-85 transition-opacity shrink-0"
+            className="flex items-center hover:opacity-85 active:scale-95 transition-all shrink-0"
             title="Buy Me a Coffee at ko-fi.com"
           >
             <img
               src="https://storage.ko-fi.com/cdn/kofi5.png?v=6"
               alt="Buy Me a Coffee at ko-fi.com"
-              className="h-8 object-contain"
+              className="h-6.5 sm:h-8 object-contain"
             />
           </a>
 
