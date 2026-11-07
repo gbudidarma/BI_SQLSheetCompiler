@@ -22,7 +22,8 @@ import {
   ChevronRight,
   TrendingUp,
   MoreHorizontal,
-  Instagram
+  Instagram,
+  Sparkles
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { isProUnlocked } from '../utils/licenseManager';
