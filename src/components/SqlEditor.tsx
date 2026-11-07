@@ -4,6 +4,7 @@ import {
   Wand2,
   RotateCcw,
   ChevronDown,
+  ChevronRight,
   BookOpen,
   Layers,
   Sparkles,
