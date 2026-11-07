@@ -483,16 +483,19 @@ export const TopBar: React.FC<TopBarProps> = ({
 
           {/* Copyright & Instagram Footer */}
           <div className="mt-2.5 pt-2 border-t border-[#162544] flex items-center justify-between text-[11px] text-slate-400">
-            <span>© {new Date().getFullYear()} SheetSQL</span>
-            <a
-              href="https://instagram.com/gbudidarma"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-pink-400 hover:text-pink-300 font-medium inline-flex items-center gap-1.5 transition-colors"
-            >
-              <Instagram className="w-3.5 h-3.5" />
-              <span>gbudidarma</span>
-            </a>
+            <div className="flex items-center gap-1">
+              <span>© {new Date().getFullYear()}</span>
+              <a
+                href="https://instagram.com/gbudidarma"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-pink-400 hover:text-pink-300 font-medium inline-flex items-center gap-1 transition-colors"
+              >
+                <Instagram className="w-3 h-3" />
+                <span>@gbudidarma</span>
+              </a>
+            </div>
+            <span>All rights reserved.</span>
           </div>
         </div>
       )}
