@@ -28,6 +28,7 @@ interface SchemaSidebarProps {
   onInsertField: (fieldName: string) => void;
   onLoadSample: (datasetId: string) => void;
   onOpenUpload: () => void;
+  onOpenPostgres?: () => void;
   onOpenVisualizer?: (tableName: string) => void;
 }
 
@@ -40,6 +41,7 @@ export const SchemaSidebar: React.FC<SchemaSidebarProps> = ({
   onInsertField,
   onLoadSample,
   onOpenUpload,
+  onOpenPostgres,
   onOpenVisualizer,
 }) => {
   const { isBright } = useTheme();
@@ -105,14 +107,26 @@ export const SchemaSidebar: React.FC<SchemaSidebarProps> = ({
               SQL Schema
             </span>
           </div>
-          <button
-            onClick={onOpenUpload}
-            className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-white bg-blue-600 hover:bg-blue-500 rounded transition cursor-pointer shadow-xs"
-            title="Upload Excel or CSV file"
-          >
-            <Plus className="w-3 h-3" />
-            <span>Upload</span>
-          </button>
+          <div className="flex items-center gap-1.5">
+            {onOpenPostgres && (
+              <button
+                onClick={onOpenPostgres}
+                className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-indigo-100 bg-indigo-700 hover:bg-indigo-600 rounded transition cursor-pointer shadow-xs border border-indigo-500/40"
+                title="Connect PostgreSQL Database (DBeaver style)"
+              >
+                <span className="text-xs">🐘</span>
+                <span>Postgres</span>
+              </button>
+            )}
+            <button
+              onClick={onOpenUpload}
+              className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-white bg-blue-600 hover:bg-blue-500 rounded transition cursor-pointer shadow-xs"
+              title="Upload Excel or CSV file"
+            >
+              <Plus className="w-3 h-3" />
+              <span>Upload</span>
+            </button>
+          </div>
         </div>
 
         {/* Search tables/columns */}
@@ -142,10 +156,35 @@ export const SchemaSidebar: React.FC<SchemaSidebarProps> = ({
                 Schema is Empty
               </p>
               <p className="mt-1 text-[11px] leading-relaxed">
-                Start by loading a sample dataset below or upload an Excel / CSV file.
+                Connect a PostgreSQL database via DBeaver, load a sample dataset, or upload an Excel / CSV file.
               </p>
             </div>
             <div className="space-y-1.5 pt-1 text-left">
+              {onOpenPostgres && (
+                <button
+                  type="button"
+                  onClick={onOpenPostgres}
+                  className={`w-full text-left p-2.5 rounded-lg border transition flex items-center justify-between group cursor-pointer ${
+                    isBright
+                      ? 'bg-indigo-50/70 hover:bg-indigo-100/70 border-indigo-200 text-indigo-950 shadow-xs'
+                      : 'bg-indigo-950/40 hover:bg-indigo-900/50 border-indigo-800/50 text-indigo-200'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 truncate">
+                    <span className="text-base shrink-0">🐘</span>
+                    <div className="truncate">
+                      <div className="text-xs font-semibold group-hover:underline">
+                        Connect PostgreSQL (DBeaver)
+                      </div>
+                      <div className="text-[10px] text-slate-400 font-mono">
+                        Local, Neon, Supabase, or Demo DB
+                      </div>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-3.5 h-3.5 text-indigo-400 shrink-0 group-hover:translate-x-0.5 transition-transform" />
+                </button>
+              )}
+
               {SAMPLE_DATASETS.map((ds) => (
                 <button
                   key={ds.id}
@@ -203,12 +242,21 @@ export const SchemaSidebar: React.FC<SchemaSidebarProps> = ({
                     ) : (
                       <ChevronRight className={`w-3.5 h-3.5 shrink-0 ${isBright ? 'text-slate-400' : 'text-slate-400'}`} />
                     )}
-                    <TableIcon className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                    {table.sourceType === 'postgres' ? (
+                      <span className="text-xs shrink-0 select-none" title="PostgreSQL Table">🐘</span>
+                    ) : (
+                      <TableIcon className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                    )}
                     <span className={`font-mono text-xs font-semibold truncate ${
                       isBright ? 'text-slate-800 group-hover:text-blue-600' : 'text-slate-200 group-hover:text-white'
                     }`} title={table.name}>
                       {table.name}
                     </span>
+                    {table.sourceType === 'postgres' && (
+                      <span className="text-[9px] font-mono px-1 py-0.2 rounded font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 shrink-0">
+                        PG
+                      </span>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-1 shrink-0">
@@ -240,8 +288,10 @@ export const SchemaSidebar: React.FC<SchemaSidebarProps> = ({
                       ? 'bg-slate-50/80 border-slate-200 text-slate-600'
                       : 'bg-[#070e1e] border-[#182c54] text-slate-400'
                   }`}>
-                    <span className="truncate max-w-[120px]" title={table.sourceFileName}>
-                      {table.sheetName || table.sourceFileName}
+                    <span className="truncate max-w-[140px]" title={table.connectionName || table.sourceFileName}>
+                      {table.sourceType === 'postgres'
+                        ? (table.connectionName ? `PG: ${table.connectionName}` : `PostgreSQL: ${table.name}`)
+                        : (table.sheetName || table.sourceFileName)}
                     </span>
                     <div className="flex items-center gap-1">
                       {onOpenVisualizer && (

@@ -565,7 +565,7 @@ export const MobileBottomNav: React.FC<{
     <nav
       role="navigation"
       aria-label="Mobile Navigation"
-      className="shrink-0 z-40 bg-[#0b1329] border-t border-[#182747] md:hidden pb-[max(env(safe-area-inset-bottom,0px),4px)] shadow-[0_-4px_16px_rgba(0,0,0,0.35)] backdrop-blur-md"
+      className="shrink-0 z-40 bg-[#0b1329] border-t border-[#182747] md:hidden pb-[max(env(safe-area-inset-bottom,0px),8px)] shadow-[0_-4px_16px_rgba(0,0,0,0.35)] backdrop-blur-md"
     >
       <div className="flex items-center gap-0.5 h-14 px-1 overflow-x-auto scrollbar-none">
         {/* Tab 1: SQL Studio */}

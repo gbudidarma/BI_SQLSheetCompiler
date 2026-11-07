@@ -18,6 +18,8 @@ export interface TableSchema {
   columns: ColumnInfo[];
   previewRows: Record<string, any>[];
   allRows?: Record<string, any>[];
+  sourceType?: 'excel' | 'postgres';
+  connectionName?: string;
 }
 
 export interface PlanStep {

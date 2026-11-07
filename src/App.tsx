@@ -13,6 +13,7 @@ import { UploadModal } from './components/UploadModal';
 import { TablePreviewModal } from './components/TablePreviewModal';
 import { QueryHistoryModal } from './components/QueryHistoryModal';
 import { DocsModal } from './components/DocsModal';
+import { PostgresConnectionModal } from './components/PostgresConnectionModal';
 import { DataModeler } from './components/DataModeler';
 import { SchemaDataComparator } from './components/SchemaDataComparator';
 import { DuplicateChecker } from './components/DuplicateChecker';
@@ -49,6 +50,7 @@ export default function App() {
 
   // Modals state
   const [isUploadOpen, setIsUploadOpen] = useState<boolean>(false);
+  const [isPostgresOpen, setIsPostgresOpen] = useState<boolean>(false);
   const [previewTable, setPreviewTable] = useState<TableSchema | null>(null);
   const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
   const [docsModal, setDocsModal] = useState<{
@@ -284,8 +286,8 @@ export default function App() {
         onOpenHistory={() => setIsHistoryOpen(true)}
       />
 
-      {/* Primary View Router with mobile bottom bar clearance */}
-      <div className="flex-1 flex min-h-0 overflow-hidden relative mb-[calc(3.5rem+max(env(safe-area-inset-bottom,0px),6px))] md:mb-0">
+      {/* Primary View Router */}
+      <div className="flex-1 flex min-h-0 overflow-hidden relative">
         {/* VIEW 1: SQL STUDIO (Sidebar + Editor + Results) */}
         {activeView === 'studio' && (
           <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden">
@@ -355,6 +357,7 @@ export default function App() {
                 }}
                 onLoadSample={loadSampleDataset}
                 onOpenUpload={() => setIsUploadOpen(true)}
+                onOpenPostgres={() => setIsPostgresOpen(true)}
                 onOpenVisualizer={(tblName) => {
                   setVisualizerInitialTable(tblName);
                   setActiveView('visualizer');
@@ -562,13 +565,13 @@ export default function App() {
       </div>
 
       {/* Footer (Clean copyright without Ko-fi widget) */}
-      <footer className="shrink-0 h-7 sm:h-8 px-3 sm:px-4 flex items-center justify-between text-[11px] sm:text-xs border-t border-[#162544] bg-[#070e1c] text-slate-400 select-none z-30">
+      <footer className="shrink-0 h-6 sm:h-8 px-3 sm:px-4 flex items-center justify-between text-[10px] sm:text-xs border-t border-[#162544] bg-[#070e1c] text-slate-400 select-none z-30">
         <div className="hidden sm:flex items-center gap-2 truncate">
           <span className="font-semibold text-slate-300">SheetSQL Compiler</span>
           <span className="text-slate-600">•</span>
           <span className="text-slate-400">In-Browser SQL & BI Studio</span>
         </div>
-        <div className="flex items-center gap-1.5 shrink-0 w-full sm:w-auto justify-center sm:justify-end text-[11px] sm:text-xs">
+        <div className="flex items-center gap-1.5 shrink-0 w-full sm:w-auto justify-center sm:justify-end text-[10px] sm:text-xs">
           <span>© {new Date().getFullYear()}</span>
           <a
             href="https://instagram.com/gbudidarma"
@@ -590,6 +593,12 @@ export default function App() {
         onClose={() => setIsUploadOpen(false)}
         onTablesLoaded={handleTablesLoaded}
         onLoadSample={loadSampleDataset}
+      />
+
+      <PostgresConnectionModal
+        isOpen={isPostgresOpen}
+        onClose={() => setIsPostgresOpen(false)}
+        onTablesLoaded={handleTablesLoaded}
       />
 
       <TablePreviewModal
