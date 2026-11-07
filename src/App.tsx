@@ -14,6 +14,7 @@ import { TablePreviewModal } from './components/TablePreviewModal';
 import { QueryHistoryModal } from './components/QueryHistoryModal';
 import { DocsModal } from './components/DocsModal';
 import { PostgresConnectionModal } from './components/PostgresConnectionModal';
+import { ProLicenseModal } from './components/ProLicenseModal';
 import { DataModeler } from './components/DataModeler';
 import { SchemaDataComparator } from './components/SchemaDataComparator';
 import { DuplicateChecker } from './components/DuplicateChecker';
@@ -51,6 +52,7 @@ export default function App() {
   // Modals state
   const [isUploadOpen, setIsUploadOpen] = useState<boolean>(false);
   const [isPostgresOpen, setIsPostgresOpen] = useState<boolean>(false);
+  const [isProModalOpen, setIsProModalOpen] = useState<boolean>(false);
   const [previewTable, setPreviewTable] = useState<TableSchema | null>(null);
   const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
   const [docsModal, setDocsModal] = useState<{
@@ -284,6 +286,7 @@ export default function App() {
         onOpenSyntax={() => setDocsModal({ isOpen: true, tab: 'syntax' })}
         onOpenShortcuts={() => setDocsModal({ isOpen: true, tab: 'shortcuts' })}
         onOpenHistory={() => setIsHistoryOpen(true)}
+        onOpenProModal={() => setIsProModalOpen(true)}
       />
 
       {/* Primary View Router */}
@@ -599,6 +602,12 @@ export default function App() {
         isOpen={isPostgresOpen}
         onClose={() => setIsPostgresOpen(false)}
         onTablesLoaded={handleTablesLoaded}
+        onOpenProModal={() => setIsProModalOpen(true)}
+      />
+
+      <ProLicenseModal
+        isOpen={isProModalOpen}
+        onClose={() => setIsProModalOpen(false)}
       />
 
       <TablePreviewModal
