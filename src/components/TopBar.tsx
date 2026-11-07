@@ -132,7 +132,7 @@ export const TopBar: React.FC<TopBarProps> = ({
             <button
               type="button"
               onClick={() => scrollNav('left')}
-              className="flex items-center justify-center w-6 h-6 mr-1 rounded-md bg-[#0e1b38] hover:bg-[#182f5e] text-slate-400 hover:text-white border border-[#1d3361] shrink-0 cursor-pointer shadow-xs transition"
+              className="flex items-center justify-center w-7 h-7 mr-1 rounded-md bg-[#0e1b38] hover:bg-[#182f5e] text-slate-400 hover:text-white border border-[#1d3361] shrink-0 cursor-pointer shadow-xs transition"
               title="Scroll tabs left"
               aria-label="Scroll tabs left"
             >
@@ -142,8 +142,8 @@ export const TopBar: React.FC<TopBarProps> = ({
             <div
               ref={navScrollRef}
               onWheel={handleNavWheel}
-              className="flex items-center gap-1 p-1 bg-[#070e1c] rounded-lg border border-[#162544] text-xs overflow-x-auto scrollbar-none select-none max-w-full"
-              style={{ scrollBehavior: 'smooth' }}
+              className="flex items-center gap-1 p-0.5 sm:p-1 h-9 bg-[#070e1c] rounded-lg border border-[#162544] text-xs overflow-x-auto scrollbar-none select-none max-w-full [&::-webkit-scrollbar]:hidden"
+              style={{ scrollBehavior: 'smooth', scrollbarWidth: 'none', msOverflowStyle: 'none' }}
             >
               <button
                 onClick={() => onChangeView('studio')}
@@ -261,7 +261,7 @@ export const TopBar: React.FC<TopBarProps> = ({
             <button
               type="button"
               onClick={() => scrollNav('right')}
-              className="flex items-center justify-center w-6 h-6 ml-1 rounded-md bg-[#0e1b38] hover:bg-[#182f5e] text-slate-400 hover:text-white border border-[#1d3361] shrink-0 cursor-pointer shadow-xs transition"
+              className="flex items-center justify-center w-7 h-7 ml-1 rounded-md bg-[#0e1b38] hover:bg-[#182f5e] text-slate-400 hover:text-white border border-[#1d3361] shrink-0 cursor-pointer shadow-xs transition"
               title="Scroll tabs right"
               aria-label="Scroll tabs right"
             >

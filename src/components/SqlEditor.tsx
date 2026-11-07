@@ -476,7 +476,7 @@ export const SqlEditor: React.FC<SqlEditorProps> = ({
   return (
     <div className="flex flex-col h-full bg-[#070e1c] border-b border-[#162544] relative">
       {/* Editor Header / Action Toolbar */}
-      <div className="flex items-center justify-between px-3 sm:px-4 py-2 bg-[#0b1429] border-b border-[#162544] shrink-0 gap-2 overflow-x-auto no-scrollbar">
+      <div className="flex items-center justify-between px-3 sm:px-4 py-2 bg-[#0b1429] border-b border-[#162544] shrink-0 gap-2 relative z-30 overflow-x-auto md:overflow-visible scrollbar-none [&::-webkit-scrollbar]:hidden">
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {/* Run Query Button */}
           <button
@@ -542,7 +542,11 @@ export const SqlEditor: React.FC<SqlEditorProps> = ({
           <button
             onClick={handleFormat}
             disabled={!query.trim()}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-200 hover:text-white bg-[#0f1b36] hover:bg-[#14244a] border border-[#1b315e]/60 disabled:opacity-40 rounded-md transition whitespace-nowrap cursor-pointer"
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md transition whitespace-nowrap cursor-pointer shadow-xs border ${
+              isBright
+                ? 'text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border-slate-300'
+                : 'text-slate-200 hover:text-white bg-[#0f1b36] hover:bg-[#14244a] border-[#1b315e]/70'
+            } disabled:opacity-40 disabled:cursor-not-allowed`}
             title="Prettify and format SQL statements"
           >
             <Wand2 className="w-3.5 h-3.5 text-blue-400" />
@@ -552,28 +556,71 @@ export const SqlEditor: React.FC<SqlEditorProps> = ({
           {/* Snippets Dropdown */}
           <div className="relative" onClick={(e) => e.stopPropagation()}>
             <button
-              onClick={() => setShowSnippets(!showSnippets)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-200 hover:text-white bg-[#0f1b36] hover:bg-[#14244a] border border-[#1b315e]/60 rounded-md transition whitespace-nowrap cursor-pointer"
+              onClick={() => {
+                setShowSnippets(!showSnippets);
+                setShowTablesHelper(false);
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md transition whitespace-nowrap cursor-pointer shadow-xs border ${
+                showSnippets
+                  ? 'bg-amber-500/25 text-amber-300 border-amber-500 ring-2 ring-amber-500/30'
+                  : isBright
+                    ? 'text-amber-800 bg-amber-50 hover:bg-amber-100 border-amber-300'
+                    : 'text-amber-300 bg-amber-950/40 hover:bg-amber-900/50 border-amber-600/60'
+              }`}
+              title="Quick SQL Query Templates"
             >
-              <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+              <BookOpen className="w-3.5 h-3.5 text-amber-400 shrink-0" />
               <span>Snippets</span>
-              <ChevronDown className="w-3 h-3 text-slate-400" />
+              <ChevronDown className={`w-3 h-3 text-amber-400/80 transition-transform duration-150 ${showSnippets ? 'rotate-180' : ''}`} />
             </button>
 
             {showSnippets && (
-              <div className="absolute left-0 mt-1 w-64 bg-[#0c162e] border border-[#1b315e] rounded-lg shadow-2xl py-1.5 z-50">
-                <div className="px-3 py-1 text-[11px] font-semibold text-slate-400 uppercase tracking-wider border-b border-[#182c54]/70">
-                  Query Templates
+              <div
+                className={`absolute left-0 top-full mt-1.5 w-80 rounded-xl shadow-2xl p-1.5 z-50 border select-none ${
+                  isBright
+                    ? 'bg-white border-slate-300 text-slate-800 shadow-xl'
+                    : 'bg-[#0c162e] border-[#1d3669] text-slate-100 shadow-[0_16px_40px_rgba(0,0,0,0.7)]'
+                }`}
+              >
+                <div
+                  className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider border-b mb-1 flex items-center justify-between ${
+                    isBright ? 'text-slate-500 border-slate-200' : 'text-slate-400 border-[#182c54]'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5">
+                    <BookOpen className="w-3 h-3 text-amber-400" />
+                    <span>SQL Query Templates</span>
+                  </div>
+                  <span className="text-[9px] font-mono opacity-70">Click to insert</span>
                 </div>
-                {snippets.map((snip, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => insertSnippet(snip.sql)}
-                    className="w-full text-left px-3 py-1.5 text-xs text-slate-200 hover:bg-blue-600 hover:text-white transition flex flex-col cursor-pointer"
-                  >
-                    <span className="font-medium">{snip.name}</span>
-                  </button>
-                ))}
+
+                <div className="max-h-72 overflow-y-auto space-y-1 pr-0.5">
+                  {snippets.map((snip, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => insertSnippet(snip.sql)}
+                      className={`w-full text-left p-2 rounded-lg text-xs transition flex flex-col gap-0.5 cursor-pointer group ${
+                        isBright
+                          ? 'hover:bg-blue-50 text-slate-700 hover:text-blue-700'
+                          : 'hover:bg-blue-600/20 text-slate-200 hover:text-white'
+                      }`}
+                    >
+                      <div className="font-semibold flex items-center justify-between">
+                        <span>{snip.name}</span>
+                        <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity text-blue-400" />
+                      </div>
+                      <code
+                        className={`text-[10px] font-mono truncate max-w-full ${
+                          isBright
+                            ? 'text-slate-500 group-hover:text-blue-600'
+                            : 'text-slate-400 group-hover:text-blue-300'
+                        }`}
+                      >
+                        {snip.sql.split('\n')[0]}
+                      </code>
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -582,16 +629,31 @@ export const SqlEditor: React.FC<SqlEditorProps> = ({
           {tables.length > 0 && (
             <div className="relative hidden lg:block" onClick={(e) => e.stopPropagation()}>
               <button
-                onClick={() => setShowTablesHelper(!showTablesHelper)}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-slate-300 hover:text-white bg-[#0f1b36] hover:bg-[#14244a] border border-[#1b315e]/60 rounded-md transition whitespace-nowrap cursor-pointer"
+                onClick={() => {
+                  setShowTablesHelper(!showTablesHelper);
+                  setShowSnippets(false);
+                }}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded-md transition whitespace-nowrap cursor-pointer shadow-xs border ${
+                  showTablesHelper
+                    ? 'bg-emerald-500/25 text-emerald-300 border-emerald-500 ring-2 ring-emerald-500/30'
+                    : isBright
+                      ? 'text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border-emerald-300'
+                      : 'text-emerald-300 bg-emerald-950/40 hover:bg-emerald-900/50 border-emerald-600/60'
+                }`}
               >
-                <Layers className="w-3.5 h-3.5 text-emerald-400" />
+                <Layers className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                 <span>Insert Field</span>
-                <ChevronDown className="w-3 h-3 text-slate-400" />
+                <ChevronDown className={`w-3 h-3 text-emerald-400/80 transition-transform duration-150 ${showTablesHelper ? 'rotate-180' : ''}`} />
               </button>
 
               {showTablesHelper && (
-                <div className="absolute left-0 mt-1 w-72 max-h-72 overflow-y-auto bg-[#0c162e] border border-[#1b315e] rounded-lg shadow-2xl p-2 z-50 space-y-2">
+                <div
+                  className={`absolute left-0 top-full mt-1.5 w-72 max-h-72 overflow-y-auto rounded-xl shadow-2xl p-2 z-50 space-y-2 border select-none ${
+                    isBright
+                      ? 'bg-white border-slate-300 text-slate-800 shadow-xl'
+                      : 'bg-[#0c162e] border-[#1d3669] text-slate-100 shadow-[0_16px_40px_rgba(0,0,0,0.7)]'
+                  }`}
+                >
                   {tables.map((tbl) => (
                     <div key={tbl.name} className="space-y-1">
                       <div
@@ -599,10 +661,14 @@ export const SqlEditor: React.FC<SqlEditorProps> = ({
                           insertColumnOrTable(tbl.name);
                           setShowTablesHelper(false);
                         }}
-                        className="text-[11px] font-semibold text-blue-300 hover:text-blue-100 cursor-pointer flex items-center justify-between px-1.5 py-0.5 rounded hover:bg-[#122347]"
+                        className={`text-[11px] font-semibold cursor-pointer flex items-center justify-between px-2 py-1 rounded transition-colors ${
+                          isBright
+                            ? 'text-blue-700 hover:bg-blue-50'
+                            : 'text-blue-300 hover:bg-[#122347]'
+                        }`}
                       >
-                        <span>{tbl.name}</span>
-                        <span className="text-[10px] text-slate-400 font-mono">table</span>
+                        <span className="font-mono">{tbl.name}</span>
+                        <span className="text-[10px] opacity-70 font-mono">table</span>
                       </div>
                       <div className="flex flex-wrap gap-1 pl-2">
                         {tbl.columns.map((col) => (
@@ -612,7 +678,11 @@ export const SqlEditor: React.FC<SqlEditorProps> = ({
                               insertColumnOrTable(col.name);
                               setShowTablesHelper(false);
                             }}
-                            className="text-[10px] font-mono px-1.5 py-0.5 bg-[#080f20] hover:bg-blue-600 hover:text-white text-slate-300 rounded border border-[#182c54]"
+                            className={`text-[10px] font-mono px-1.5 py-0.5 rounded border transition-colors cursor-pointer ${
+                              isBright
+                                ? 'bg-slate-100 hover:bg-blue-600 hover:text-white text-slate-700 border-slate-300'
+                                : 'bg-[#080f20] hover:bg-blue-600 hover:text-white text-slate-300 border-[#182c54]'
+                            }`}
                           >
                             {col.name}
                           </button>
