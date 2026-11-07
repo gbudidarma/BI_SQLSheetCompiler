@@ -24,7 +24,9 @@ import {
   Filter,
   Eye,
   SlidersHorizontal,
-  Info
+  Info,
+  ZoomIn,
+  ZoomOut
 } from 'lucide-react';
 import {
   TableSchema,
@@ -561,6 +563,35 @@ export const DataModeler: React.FC<DataModelerProps> = ({
             <span className="hidden sm:inline">Auto-Arrange</span>
           </button>
 
+          {/* Canvas Zoom In & Zoom Out Controls */}
+          <div className="flex items-center bg-[#0e1b38] border border-[#1e3668] rounded-lg p-0.5 shadow-xs">
+            <button
+              onClick={() => setZoomLevel((z) => Math.max(0.4, Number((z - 0.15).toFixed(2))))}
+              disabled={zoomLevel <= 0.4}
+              className="p-1.5 text-slate-300 hover:text-white hover:bg-[#182c54] disabled:opacity-40 rounded transition cursor-pointer"
+              title="Zoom Out (Ctrl + Scroll Down)"
+              aria-label="Zoom Out"
+            >
+              <ZoomOut className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => setZoomLevel(1)}
+              className="px-2 py-1 text-[11px] font-mono text-slate-300 hover:text-white hover:bg-[#182c54] rounded transition cursor-pointer min-w-[46px] text-center"
+              title="Click to Reset Zoom to 100%"
+            >
+              {Math.round(zoomLevel * 100)}%
+            </button>
+            <button
+              onClick={() => setZoomLevel((z) => Math.min(2.0, Number((z + 0.15).toFixed(2))))}
+              disabled={zoomLevel >= 2.0}
+              className="p-1.5 text-slate-300 hover:text-white hover:bg-[#182c54] disabled:opacity-40 rounded transition cursor-pointer"
+              title="Zoom In (Ctrl + Scroll Up)"
+              aria-label="Zoom In"
+            >
+              <ZoomIn className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
           {/* Compare Schemas / Data Button */}
           <button
             onClick={() => onOpenComparator(tables[0]?.name, tables[1]?.name)}
@@ -594,36 +625,51 @@ export const DataModeler: React.FC<DataModelerProps> = ({
           className="flex-1 relative overflow-auto cursor-crosshair min-h-[300px]"
           style={{
             backgroundImage: `radial-gradient(#182c54 1.2px, transparent 1.2px)`,
-            backgroundSize: '24px 24px',
+            backgroundSize: `${24 * zoomLevel}px ${24 * zoomLevel}px`,
             backgroundColor: '#070e1c',
           }}
           onMouseDown={() => setActiveJoinPopover(null)}
           onTouchMove={handleCanvasTouchMove}
           onTouchEnd={handleCanvasMouseUp}
+          onWheel={(e) => {
+            if (e.ctrlKey || e.metaKey) {
+              e.preventDefault();
+              const delta = e.deltaY < 0 ? 0.1 : -0.1;
+              setZoomLevel((z) => Math.min(2.0, Math.max(0.4, Number((z + delta).toFixed(2)))));
+            }
+          }}
         >
           {/* Zoom and Navigation Widget (Positioned safely above MobileBottomNav on small screens) */}
-          <div className="absolute bottom-20 sm:bottom-6 left-4 sm:left-6 z-20 flex items-center gap-1 bg-[#0c162e]/90 backdrop-blur-xs border border-[#182c54] rounded-lg p-1 text-xs shadow-xl">
+          <div className="absolute bottom-20 sm:bottom-6 left-4 sm:left-6 z-20 flex items-center gap-1 bg-[#0c162e]/95 backdrop-blur-md border border-[#182c54] rounded-lg p-1 text-xs shadow-2xl">
             <button
-              onClick={() => setZoomLevel((z) => Math.max(0.6, z - 0.1))}
-              className="px-2 py-1 rounded text-slate-300 hover:text-white hover:bg-[#182c54] transition cursor-pointer"
-              title="Zoom Out"
+              onClick={() => setZoomLevel((z) => Math.max(0.4, Number((z - 0.15).toFixed(2))))}
+              disabled={zoomLevel <= 0.4}
+              className="p-1.5 rounded text-slate-300 hover:text-white hover:bg-[#182c54] disabled:opacity-40 transition cursor-pointer flex items-center justify-center"
+              title="Zoom Out (Ctrl + Scroll Down)"
+              aria-label="Zoom Out"
             >
-              -
-            </button>
-            <span className="font-mono text-slate-400 px-1 text-[11px]">
-              {Math.round(zoomLevel * 100)}%
-            </span>
-            <button
-              onClick={() => setZoomLevel((z) => Math.min(1.5, z + 0.1))}
-              className="px-2 py-1 rounded text-slate-300 hover:text-white hover:bg-[#182c54] transition cursor-pointer"
-              title="Zoom In"
-            >
-              +
+              <ZoomOut className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={() => setZoomLevel(1)}
-              className="px-2 py-1 rounded text-slate-400 hover:text-white hover:bg-[#182c54] text-[10px] ml-1 transition cursor-pointer"
-              title="Reset Zoom"
+              className="font-mono text-slate-300 hover:text-white hover:bg-[#182c54] px-2 py-1 rounded text-[11px] transition cursor-pointer font-semibold min-w-[46px] text-center"
+              title="Click to Reset Zoom to 100%"
+            >
+              {Math.round(zoomLevel * 100)}%
+            </button>
+            <button
+              onClick={() => setZoomLevel((z) => Math.min(2.0, Number((z + 0.15).toFixed(2))))}
+              disabled={zoomLevel >= 2.0}
+              className="p-1.5 rounded text-slate-300 hover:text-white hover:bg-[#182c54] disabled:opacity-40 transition cursor-pointer flex items-center justify-center"
+              title="Zoom In (Ctrl + Scroll Up)"
+              aria-label="Zoom In"
+            >
+              <ZoomIn className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => setZoomLevel(1)}
+              className="px-2 py-1 rounded text-slate-400 hover:text-white hover:bg-[#182c54] text-[10px] ml-0.5 border-l border-[#182c54] pl-2 transition cursor-pointer"
+              title="Reset Zoom to 100%"
             >
               Reset
             </button>
