@@ -8,7 +8,7 @@
 
 // Must match the salt in scripts/generateLicenseKey.cjs
 export const LICENSE_SALT = 'SSQL_KOFI_PRO_KEY_SALT_v1_2026';
-export const KOFI_SHOP_URL = 'https://ko-fi.com/V7V2JM8S4';
+export const KOFI_SHOP_URL = 'https://ko-fi.com/s/9b3a2aa6fe';
 
 export interface LicenseStatus {
   isPro: boolean;
