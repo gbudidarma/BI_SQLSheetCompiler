@@ -562,7 +562,7 @@ export default function App() {
       </div>
 
       {/* Footer */}
-      <footer className="shrink-0 h-9 px-4 flex items-center justify-between text-xs border-t border-[#162544] bg-[#070e1c] text-slate-400 select-none z-10 mb-14 md:mb-0">
+      <footer className="shrink-0 h-7 sm:h-8 px-3 sm:px-4 flex items-center justify-between text-[11px] sm:text-xs border-t border-[#162544] bg-[#070e1c] text-slate-400 select-none z-30">
         <div className="hidden sm:flex items-center gap-2 truncate">
           <span className="font-semibold text-slate-300">SheetSQL Compiler</span>
           <span className="text-slate-600">•</span>
@@ -578,24 +578,11 @@ export default function App() {
             <img
               src="https://storage.ko-fi.com/cdn/kofi5.png?v=6"
               alt="Buy Me a Coffee at ko-fi.com"
-              className="h-6 object-contain"
+              className="h-5 object-contain"
             />
           </a>
         </div>
-        <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-center sm:justify-end">
-          <a
-            href="https://ko-fi.com/V7V2JM8S4"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="sm:hidden hover:opacity-85 transition-opacity inline-flex items-center mr-1"
-            title="Buy Me a Coffee at ko-fi.com"
-          >
-            <img
-              src="https://storage.ko-fi.com/cdn/kofi5.png?v=6"
-              alt="Buy Me a Coffee at ko-fi.com"
-              className="h-5.5 object-contain"
-            />
-          </a>
+        <div className="flex items-center gap-1.5 shrink-0 w-full sm:w-auto justify-center sm:justify-end text-[11px] sm:text-xs">
           <span>© {new Date().getFullYear()}</span>
           <a
             href="https://instagram.com/gbudidarma"
