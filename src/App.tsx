@@ -272,7 +272,7 @@ export default function App() {
   };
 
   return (
-    <div className="flex flex-col h-screen h-[100dvh] w-screen overflow-hidden bg-[#070d1a] text-slate-100 font-sans">
+    <div className="flex flex-col h-screen h-[100dvh] h-[100svh] w-screen overflow-hidden bg-[#070d1a] text-slate-100 font-sans">
       {/* 3-Zone Top Navigation Bar with View Switcher */}
       <TopBar
         activeView={activeView}
@@ -561,9 +561,9 @@ export default function App() {
         )}
       </div>
 
-      {/* Footer */}
-      <footer className="shrink-0 h-7 sm:h-8 px-3 sm:px-4 flex items-center justify-between text-[11px] sm:text-xs border-t border-[#162544] bg-[#070e1c] text-slate-400 select-none z-30">
-        <div className="hidden sm:flex items-center gap-2 truncate">
+      {/* Desktop Footer (On mobile, footer is rendered inside MobileBottomNav after navigation) */}
+      <footer className="hidden md:flex shrink-0 h-8 px-4 items-center justify-between text-xs border-t border-[#162544] bg-[#070e1c] text-slate-400 select-none z-30">
+        <div className="flex items-center gap-2 truncate">
           <span className="font-semibold text-slate-300">SheetSQL Compiler</span>
           <span className="text-slate-600">•</span>
           <span className="text-slate-400">In-Browser SQL & BI Studio</span>
@@ -582,7 +582,7 @@ export default function App() {
             />
           </a>
         </div>
-        <div className="flex items-center gap-1.5 shrink-0 w-full sm:w-auto justify-center sm:justify-end text-[11px] sm:text-xs">
+        <div className="flex items-center gap-1.5 shrink-0 text-xs">
           <span>© {new Date().getFullYear()}</span>
           <a
             href="https://instagram.com/gbudidarma"
