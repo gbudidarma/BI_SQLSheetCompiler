@@ -159,7 +159,9 @@ export function getSuggestions(
 
     if (matchedTable) {
       matchedTable.columns.forEach((col) => {
-        if (!lowerPrefix || col.name.toLowerCase().startsWith(lowerPrefix) || col.name.toLowerCase().includes(lowerPrefix)) {
+        const colLower = col.name.toLowerCase();
+        // Only suggest if prefix is empty (just typed dot) or column is incomplete
+        if (!lowerPrefix || (colLower.startsWith(lowerPrefix) && colLower !== lowerPrefix)) {
           suggestions.push({
             label: col.name,
             insertText: col.name,
@@ -183,8 +185,8 @@ export function getSuggestions(
   // Only suggest if prefix is at least 1 character or user explicitly requested
   if (lowerPrefix.length === 0) {
     // If empty prefix but right after FROM or JOIN, suggest tables
-    const textBefore = text.substring(0, cursorPos).trimEnd();
-    if (/\b(FROM|JOIN|INTO|TABLE)\s+$/i.test(textBefore)) {
+    const textBefore = text.substring(0, cursorPos);
+    if (/\b(FROM|JOIN|INTO|TABLE|UPDATE)\s+$/i.test(textBefore)) {
       tables.forEach((tbl) => {
         suggestions.push({
           label: tbl.name,
@@ -195,12 +197,32 @@ export function getSuggestions(
       });
       return { suggestions, tokenStart, prefix, qualifier };
     }
+
+    // If after WHERE, ON, AND, OR, SET, HAVING, SELECT, suggest columns
+    if (/\b(WHERE|ON|AND|OR|SET|HAVING|SELECT)\s+$/i.test(textBefore)) {
+      tables.forEach((tbl) => {
+        tbl.columns.forEach((col) => {
+          if (!suggestions.some((s) => s.label === col.name)) {
+            suggestions.push({
+              label: col.name,
+              insertText: col.name,
+              type: 'column',
+              detail: `${tbl.name}.${col.name} (${col.type})`,
+              dataType: col.type,
+            });
+          }
+        });
+      });
+      return { suggestions: suggestions.slice(0, 10), tokenStart, prefix, qualifier };
+    }
+
     return { suggestions: [], tokenStart, prefix, qualifier };
   }
 
-  // 1. Match Table Names
+  // 1. Match Table Names (only when incomplete)
   tables.forEach((tbl) => {
-    if (tbl.name.toLowerCase().startsWith(lowerPrefix) || tbl.name.toLowerCase().includes(lowerPrefix)) {
+    const tblLower = tbl.name.toLowerCase();
+    if (tblLower.startsWith(lowerPrefix) && tblLower !== lowerPrefix) {
       suggestions.push({
         label: tbl.name,
         insertText: tbl.name,
@@ -210,10 +232,11 @@ export function getSuggestions(
     }
   });
 
-  // 2. Match Columns across all active tables
+  // 2. Match Columns across all active tables (only when incomplete)
   tables.forEach((tbl) => {
     tbl.columns.forEach((col) => {
-      if (col.name.toLowerCase().startsWith(lowerPrefix) || col.name.toLowerCase().includes(lowerPrefix)) {
+      const colLower = col.name.toLowerCase();
+      if (colLower.startsWith(lowerPrefix) && colLower !== lowerPrefix) {
         // avoid duplicates if column exists in multiple tables
         if (!suggestions.some((s) => s.type === 'column' && s.label === col.name)) {
           suggestions.push({
@@ -228,9 +251,10 @@ export function getSuggestions(
     });
   });
 
-  // 3. Match SQL Functions
+  // 3. Match SQL Functions (suggest function signature / templates)
   SQL_FUNCTIONS.forEach((fn) => {
-    if (fn.label.toLowerCase().startsWith(lowerPrefix) || fn.label.toLowerCase().includes(lowerPrefix)) {
+    const fnLower = fn.label.toLowerCase();
+    if (fnLower.startsWith(lowerPrefix) && fn.insertText.toLowerCase() !== lowerPrefix) {
       suggestions.push({
         label: fn.label,
         insertText: fn.insertText,
@@ -241,9 +265,10 @@ export function getSuggestions(
     }
   });
 
-  // 4. Match SQL Keywords
+  // 4. Match SQL Keywords (only suggest when user has not yet completed the word)
   SQL_KEYWORDS.forEach((kw) => {
-    if (kw.label.toLowerCase().startsWith(lowerPrefix)) {
+    const kwLower = kw.label.toLowerCase();
+    if (kwLower.startsWith(lowerPrefix) && kwLower !== lowerPrefix) {
       suggestions.push({
         label: kw.label,
         insertText: `${kw.label} `,

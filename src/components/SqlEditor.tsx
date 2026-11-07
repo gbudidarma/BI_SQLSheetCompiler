@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { formatSql } from '../utils/sqlEngine';
 import { QueryResult, TableSchema } from '../types';
-import { getSuggestions, SqlSuggestion } from '../utils/sqlAutocomplete';
+import { getSuggestions, getContextAtCursor, SqlSuggestion } from '../utils/sqlAutocomplete';
 import { SqlAutocompletePopover } from './SqlAutocompletePopover';
 import { highlightSql } from '../utils/sqlHighlighter';
 import { useTheme } from '../context/ThemeContext';
@@ -144,15 +144,15 @@ export const SqlEditor: React.FC<SqlEditorProps> = ({
     return { top: clampedTop, left: clampedLeft };
   }, []);
 
-  // Update suggestions based on cursor position
+  // Update suggestions based on text and cursor position
   const updateSuggestions = useCallback(
-    (cursorPos: number, explicit = false) => {
+    (textToUse: string, cursorPos: number, explicit = false) => {
       if (!autoSuggestEnabled && !explicit) {
         setPopoverVisible(false);
         return;
       }
 
-      const res = getSuggestions(query, cursorPos, tables);
+      const res = getSuggestions(textToUse, cursorPos, tables);
       if (res.suggestions.length > 0) {
         setSuggestions(res.suggestions);
         setActiveIndex(0);
@@ -168,7 +168,7 @@ export const SqlEditor: React.FC<SqlEditorProps> = ({
         setPopoverVisible(false);
       }
     },
-    [query, tables, autoSuggestEnabled, calculateCaretCoordinates]
+    [tables, autoSuggestEnabled, calculateCaretCoordinates]
   );
 
   // Handle accepting a suggestion
@@ -177,16 +177,19 @@ export const SqlEditor: React.FC<SqlEditorProps> = ({
       const textarea = textareaRef.current;
       if (!textarea) return;
 
-      const { tokenStart, prefix, qualifier } = activeTokenInfo;
-      const currentVal = query;
+      const currentVal = textarea.value;
+      const cursorPos = textarea.selectionStart;
 
-      let replaceStart = tokenStart;
-      let replaceLength = prefix.length;
+      // Dynamically compute exact token at cursor from the live DOM textarea to avoid any sync lag
+      const context = getContextAtCursor(currentVal, cursorPos);
+
+      let replaceStart = context.tokenStart;
+      let replaceLength = context.prefix.length;
 
       // If user had a qualifier like "o.cust", we replace after the dot
-      if (qualifier) {
-        replaceStart = tokenStart + qualifier.length + 1;
-        replaceLength = prefix.length;
+      if (context.qualifier) {
+        replaceStart = context.tokenStart + context.qualifier.length + 1;
+        replaceLength = context.prefix.length;
       }
 
       const before = currentVal.substring(0, replaceStart);
@@ -205,7 +208,7 @@ export const SqlEditor: React.FC<SqlEditorProps> = ({
         textarea.focus();
       }, 0);
     },
-    [query, activeTokenInfo, onChange]
+    [onChange]
   );
 
   // Handle keyboard events (navigating suggestions or executing)
@@ -223,8 +226,20 @@ export const SqlEditor: React.FC<SqlEditorProps> = ({
         return;
       }
       if (e.key === 'Enter' || e.key === 'Tab') {
+        const item = suggestions[activeIndex] || suggestions[0];
+        // If Enter is pressed and the suggestion is already identical to what was typed,
+        // close the popover and let the normal newline happen
+        if (
+          e.key === 'Enter' &&
+          item &&
+          item.label.toLowerCase() === activeTokenInfo.prefix.toLowerCase()
+        ) {
+          setPopoverVisible(false);
+          return;
+        }
+
         e.preventDefault();
-        handleSelectSuggestion(suggestions[activeIndex]);
+        handleSelectSuggestion(item);
         return;
       }
       if (e.key === 'Escape') {
@@ -239,7 +254,7 @@ export const SqlEditor: React.FC<SqlEditorProps> = ({
       e.preventDefault();
       const textarea = textareaRef.current;
       if (textarea) {
-        updateSuggestions(textarea.selectionStart, true);
+        updateSuggestions(textarea.value, textarea.selectionStart, true);
       }
       return;
     }
@@ -271,17 +286,15 @@ export const SqlEditor: React.FC<SqlEditorProps> = ({
     }
   };
 
-  // On textarea change: update query and check suggestions
+  // On textarea change: update query and check suggestions immediately
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const nextVal = e.target.value;
     const cursorPos = e.target.selectionStart;
     onChange(nextVal);
     setQueryModifiedSinceExecution(true);
 
-    // Trigger auto-suggestions on typing
-    setTimeout(() => {
-      updateSuggestions(cursorPos);
-    }, 10);
+    // Trigger auto-suggestions immediately with the new value
+    updateSuggestions(nextVal, cursorPos);
   };
 
   // Jump to specific error line or token in textarea
@@ -871,7 +884,7 @@ export const SqlEditor: React.FC<SqlEditorProps> = ({
               // On click inside textarea, check if cursor is on a word
               const textarea = textareaRef.current;
               if (textarea) {
-                updateSuggestions(textarea.selectionStart);
+                updateSuggestions(textarea.value, textarea.selectionStart);
               }
             }}
             placeholder="-- Write your SQL query here (e.g., SELECT * FROM sales_orders WHERE discount_pct > 0;)"
