@@ -102,38 +102,20 @@ export const SchemaSidebar: React.FC<SchemaSidebarProps> = ({
         isBright ? 'bg-white border-slate-200' : 'bg-[#091224] border-[#162544]'
       }`}>
         <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-1.5">
-            <Database className="w-4 h-4 text-blue-500" />
+          <div className="flex items-center gap-2">
+            <Database className="w-4 h-4 text-blue-500 shrink-0" />
             <span className={`text-xs font-semibold tracking-wide uppercase ${
               isBright ? 'text-slate-800' : 'text-slate-200'
             }`}>
               SQL Schema
             </span>
-            {isProUnlocked() ? (
-              <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30">
-                💎 Unlimited
-              </span>
-            ) : (
-              <button
-                type="button"
-                onClick={onOpenProModal}
-                className={`text-[9px] font-mono px-1.5 py-0.2 rounded border transition cursor-pointer flex items-center gap-1 ${
-                  tables.length >= FREE_TABLE_LIMIT
-                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30 font-bold'
-                    : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200'
-                }`}
-                title={`Free plan limit: ${FREE_TABLE_LIMIT} tables. Click to unlock Unlimited Tables.`}
-              >
-                <span>{tables.length}/{FREE_TABLE_LIMIT}</span>
-                {tables.length >= FREE_TABLE_LIMIT && <span className="text-[8px] uppercase">Pro</span>}
-              </button>
-            )}
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 shrink-0">
             {onOpenPostgres && (
               <button
+                type="button"
                 onClick={onOpenPostgres}
-                className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-indigo-100 bg-indigo-700 hover:bg-indigo-600 rounded transition cursor-pointer shadow-xs border border-indigo-500/40"
+                className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-indigo-100 bg-indigo-700 hover:bg-indigo-600 rounded transition cursor-pointer shadow-xs border border-indigo-500/40 shrink-0"
                 title="Connect PostgreSQL Database (DBeaver style)"
               >
                 <span className="text-xs">🐘</span>
@@ -141,8 +123,9 @@ export const SchemaSidebar: React.FC<SchemaSidebarProps> = ({
               </button>
             )}
             <button
+              type="button"
               onClick={onOpenUpload}
-              className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-white bg-blue-600 hover:bg-blue-500 rounded transition cursor-pointer shadow-xs"
+              className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-white bg-blue-600 hover:bg-blue-500 rounded transition cursor-pointer shadow-xs shrink-0"
               title="Upload Excel or CSV file"
             >
               <Plus className="w-3 h-3" />
