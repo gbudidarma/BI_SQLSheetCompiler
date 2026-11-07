@@ -112,13 +112,13 @@ export const TopBar: React.FC<TopBarProps> = ({
     <>
       <header className="flex items-center justify-between gap-2 sm:gap-4 px-2.5 sm:px-5 py-2 sm:py-2.5 bg-[#0b1329] border-b border-[#182747] shrink-0 z-30 shadow-md">
         {/* Zone 1: Brand title & Desktop View Switcher */}
-        <div className="flex items-center gap-3 sm:gap-5 min-w-0 flex-1">
-          <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
-            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold shadow-md shadow-blue-900/40">
+        <div className="flex items-center gap-2 sm:gap-5 shrink-0 min-w-max md:min-w-0 md:flex-1">
+          <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 select-none">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold shadow-md shadow-blue-900/40 shrink-0">
               <Terminal className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
-            <div className="flex flex-col">
-              <span className="text-sm sm:text-base font-bold tracking-tight text-slate-100 font-sans leading-none">
+            <div className="flex flex-col shrink-0">
+              <span className="text-sm sm:text-base font-bold tracking-tight text-slate-100 font-sans leading-none whitespace-nowrap">
                 SheetSQL
               </span>
               <span className="text-[10px] text-blue-400 font-mono hidden sm:inline leading-tight">
@@ -380,7 +380,7 @@ export const TopBar: React.FC<TopBarProps> = ({
         </div>
 
         {/* Zone 3: Dark/Bright Theme Select & Actions */}
-        <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+        <div className="flex items-center gap-1 sm:gap-2.5 shrink-0">
           {/* Ko-fi Support Button (visible in header across mobile and desktop) */}
           <a
             href="https://ko-fi.com/V7V2JM8S4"
@@ -392,7 +392,7 @@ export const TopBar: React.FC<TopBarProps> = ({
             <img
               src="https://storage.ko-fi.com/cdn/kofi5.png?v=6"
               alt="Buy Me a Coffee at ko-fi.com"
-              className="h-6.5 sm:h-8 object-contain"
+              className="h-6 sm:h-8 object-contain shrink-0"
             />
           </a>
 
@@ -401,24 +401,39 @@ export const TopBar: React.FC<TopBarProps> = ({
             <button
               type="button"
               onClick={onOpenProModal}
-              className={`flex items-center gap-1.5 px-2.5 py-1 sm:py-1.5 rounded-lg text-xs font-bold transition cursor-pointer shadow-xs ${
+              className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg text-xs font-bold transition cursor-pointer shadow-xs shrink-0 ${
                 isPro
                   ? 'bg-amber-400 hover:bg-amber-300 text-slate-950 font-black'
                   : 'bg-gradient-to-r from-pink-600 via-indigo-600 to-purple-600 hover:opacity-90 text-white'
               }`}
               title={isPro ? 'SheetSQL Pro Active (Unlimited Tables)' : 'Unlock Unlimited Tables with SheetSQL Pro ($5)'}
             >
-              <Sparkles className={`w-3.5 h-3.5 ${isPro ? 'fill-current' : 'text-amber-300'}`} />
+              <Sparkles className={`w-3.5 h-3.5 ${isPro ? 'fill-current' : 'text-amber-300'} shrink-0`} />
               <span className="hidden sm:inline">{isPro ? 'PRO (Unlimited)' : 'Unlock Unlimited'}</span>
-              <span className="sm:hidden">PRO</span>
+              <span className="sm:hidden font-mono text-[10px]">PRO</span>
             </button>
           )}
 
-          {/* Dark Mode and Bright Mode Selector */}
+          {/* Mobile Single-Tap Theme Toggle (< sm) */}
+          <button
+            type="button"
+            onClick={() => setTheme(theme === 'dark' ? 'bright' : 'dark')}
+            className="sm:hidden p-1.5 rounded-lg bg-[#070e1c] border border-[#162544] text-slate-300 hover:text-white shrink-0 cursor-pointer transition-colors shadow-xs"
+            title={`Switch to ${theme === 'dark' ? 'Bright' : 'Dark'} Mode`}
+            aria-label="Toggle theme mode"
+          >
+            {theme === 'dark' ? (
+              <Moon className="w-3.5 h-3.5 text-blue-300" />
+            ) : (
+              <Sun className="w-3.5 h-3.5 text-amber-400" />
+            )}
+          </button>
+
+          {/* Desktop Dual Theme Selector (sm+) */}
           <div
             role="group"
             aria-label="Theme mode selection"
-            className="flex items-center p-0.5 bg-[#070e1c] rounded-lg border border-[#162544] text-xs shadow-inner"
+            className="hidden sm:flex items-center p-0.5 bg-[#070e1c] rounded-lg border border-[#162544] text-xs shadow-inner shrink-0"
           >
             <button
               type="button"
@@ -454,12 +469,11 @@ export const TopBar: React.FC<TopBarProps> = ({
           {/* Primary Upload Button */}
           <button
             onClick={onOpenUpload}
-            className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-1.5 sm:py-2 text-xs font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-500 active:bg-blue-700 transition shadow-sm whitespace-nowrap shrink-0 cursor-pointer"
+            className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3.5 py-1.5 sm:py-2 text-xs font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-500 active:bg-blue-700 transition shadow-sm whitespace-nowrap shrink-0 cursor-pointer"
             title="Upload Excel or CSV file"
           >
             <UploadCloud className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            <span className="hidden xs:inline">Upload</span>
-            <span className="hidden sm:inline">Excel</span>
+            <span className="hidden sm:inline">Upload</span>
           </button>
 
           {/* Mobile Menu Hamburger button (hidden on desktop lg+) */}
