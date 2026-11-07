@@ -21,7 +21,8 @@ import {
   ChevronLeft,
   ChevronRight,
   TrendingUp,
-  MoreHorizontal
+  MoreHorizontal,
+  Instagram
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 
@@ -478,6 +479,20 @@ export const TopBar: React.FC<TopBarProps> = ({
             <span className="font-semibold text-blue-400 uppercase tracking-wider text-[11px] bg-blue-950/70 border border-blue-800/60 px-2 py-0.5 rounded">
               {activeView === 'studio' ? 'SQL Studio' : activeView === 'modeler' ? 'Data Modeler' : activeView === 'comparator' ? 'Comparator' : activeView === 'duplicates' ? 'Duplicate Checker' : activeView === 'visualizer' ? 'Visualizer' : 'BI Schema'}
             </span>
+          </div>
+
+          {/* Copyright & Instagram Footer */}
+          <div className="mt-2.5 pt-2 border-t border-[#162544] flex items-center justify-between text-[11px] text-slate-400">
+            <span>© {new Date().getFullYear()} SheetSQL</span>
+            <a
+              href="https://instagram.com/gbudidarma"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-pink-400 hover:text-pink-300 font-medium inline-flex items-center gap-1.5 transition-colors"
+            >
+              <Instagram className="w-3.5 h-3.5" />
+              <span>gbudidarma</span>
+            </a>
           </div>
         </div>
       )}

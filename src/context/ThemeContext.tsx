@@ -18,10 +18,6 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (saved === 'bright' || saved === 'dark') {
         return saved;
       }
-      // Check system preference if no saved preference
-      if (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
-        return 'bright';
-      }
     } catch {
       // Fallback to default
     }
