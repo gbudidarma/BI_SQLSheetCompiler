@@ -58,8 +58,9 @@ export default function App() {
   const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
   const [docsModal, setDocsModal] = useState<{
     isOpen: boolean;
-    tab: 'docs' | 'syntax' | 'shortcuts';
-  }>({ isOpen: false, tab: 'docs' });
+    tab: 'features' | 'docs' | 'syntax' | 'shortcuts';
+    initialSection?: string;
+  }>({ isOpen: false, tab: 'features' });
 
   // Handle dragging vertical divider between SQL Editor and Results Grid
   const handleMouseDownSplitter = (e: React.MouseEvent) => {
@@ -305,7 +306,9 @@ export default function App() {
         activeView={activeView}
         onChangeView={setActiveView}
         onOpenUpload={() => setIsUploadOpen(true)}
-        onOpenDocs={() => setDocsModal({ isOpen: true, tab: 'docs' })}
+        onOpenDocs={(tab = 'features', section) =>
+          setDocsModal({ isOpen: true, tab, initialSection: section })
+        }
         onOpenSyntax={() => setDocsModal({ isOpen: true, tab: 'syntax' })}
         onOpenShortcuts={() => setDocsModal({ isOpen: true, tab: 'shortcuts' })}
         onOpenHistory={() => setIsHistoryOpen(true)}
@@ -656,8 +659,13 @@ export default function App() {
 
       <DocsModal
         isOpen={docsModal.isOpen}
-        onClose={() => setDocsModal({ isOpen: false, tab: 'docs' })}
+        onClose={() => setDocsModal((prev) => ({ ...prev, isOpen: false }))}
         defaultTab={docsModal.tab}
+        initialSection={docsModal.initialSection}
+        onNavigateToView={(view: AppViewTab) => {
+          setActiveView(view);
+          setDocsModal((prev) => ({ ...prev, isOpen: false }));
+        }}
       />
 
       {/* Mobile Bottom Navigation Bar (< md) */}

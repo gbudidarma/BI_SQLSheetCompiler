@@ -42,7 +42,7 @@ interface TopBarProps {
   activeView: AppViewTab;
   onChangeView: (view: AppViewTab) => void;
   onOpenUpload: () => void;
-  onOpenDocs: () => void;
+  onOpenDocs: (tab?: 'features' | 'docs' | 'syntax' | 'shortcuts', section?: string) => void;
   onOpenSyntax: () => void;
   onOpenShortcuts: () => void;
   onOpenHistory: () => void;
@@ -279,24 +279,24 @@ export const TopBar: React.FC<TopBarProps> = ({
                 ? 'bg-[#14264d] border-blue-500/50 text-white ring-2 ring-blue-500/20'
                 : 'text-slate-300 hover:text-white bg-[#0e1b38] hover:bg-[#14264d] border-[#1d3361]'
             }`}
-            title="More Options (Documentation, Syntax Reference, Shortcuts, History)"
+            title="Help, Guides, All Menu Reference, Syntax, Shortcuts & History"
             aria-expanded={moreMenuOpen}
           >
             <HelpCircle className="w-3.5 h-3.5 text-blue-400" />
-            <span>More</span>
+            <span>Guide & More</span>
             <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${moreMenuOpen ? 'rotate-180' : ''}`} />
           </button>
 
           {/* More Menu Dropdown Popover */}
           {moreMenuOpen && (
-            <div className="absolute right-0 mt-2 w-64 rounded-xl bg-[#0c162e] border border-[#1b315e] p-1.5 shadow-2xl z-50 animate-in fade-in slide-in-from-top-1 duration-150">
+            <div className="absolute right-0 mt-2 w-72 rounded-xl bg-[#0c162e] border border-[#1b315e] p-1.5 shadow-2xl z-50 animate-in fade-in slide-in-from-top-1 duration-150">
               <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-[#162544] mb-1">
-                Help & Reference
+                Help & Documentation
               </div>
 
               <button
                 onClick={() => {
-                  onOpenDocs();
+                  onOpenDocs('features');
                   setMoreMenuOpen(false);
                 }}
                 className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs text-slate-200 hover:text-white hover:bg-[#14264d] transition cursor-pointer text-left group"
@@ -305,8 +305,27 @@ export const TopBar: React.FC<TopBarProps> = ({
                   <BookOpen className="w-3.5 h-3.5" />
                 </div>
                 <div>
-                  <div className="font-semibold text-slate-100">Documentation</div>
-                  <div className="text-[10px] text-slate-400">Guides, features & tutorials</div>
+                  <div className="font-semibold text-slate-100 flex items-center gap-1.5">
+                    <span>Feature & Menu Guide</span>
+                    <span className="text-[9px] bg-blue-500/25 text-blue-300 px-1.5 py-0.2 rounded font-normal">All Menus</span>
+                  </div>
+                  <div className="text-[10px] text-slate-400">BI Schema, Data Mart, Forecasting, etc.</div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => {
+                  onOpenDocs('docs');
+                  setMoreMenuOpen(false);
+                }}
+                className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs text-slate-200 hover:text-white hover:bg-[#14264d] transition cursor-pointer text-left group"
+              >
+                <div className="w-6 h-6 rounded-md bg-cyan-500/15 border border-cyan-500/20 flex items-center justify-center text-cyan-400 shrink-0 group-hover:scale-105 transition-transform">
+                  <HelpCircle className="w-3.5 h-3.5" />
+                </div>
+                <div>
+                  <div className="font-semibold text-slate-100">Core Principles</div>
+                  <div className="text-[10px] text-slate-400">Headers, multi-sheet joins & privacy</div>
                 </div>
               </button>
 
@@ -358,6 +377,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                   <div className="font-semibold text-slate-100">History</div>
                   <div className="text-[10px] text-slate-400">Past executed queries</div>
                 </div>
+              </button>
               </button>
 
               <div className="my-1 border-t border-[#162544]" />
@@ -494,15 +514,18 @@ export const TopBar: React.FC<TopBarProps> = ({
           <div className="grid grid-cols-2 gap-2 text-xs">
             <button
               onClick={() => {
-                onOpenDocs();
+                onOpenDocs('features');
                 setMobileMenuOpen(false);
               }}
               className="flex items-center gap-2 p-2.5 rounded-lg bg-[#070e1c] hover:bg-[#122347] border border-[#162544] text-slate-200 cursor-pointer"
             >
               <BookOpen className="w-4 h-4 text-blue-400" />
               <div className="text-left">
-                <div className="font-semibold">Docs</div>
-                <div className="text-[10px] text-slate-400">Guides & features</div>
+                <div className="font-semibold flex items-center gap-1">
+                  <span>Menu Guides</span>
+                  <span className="text-[9px] bg-blue-500/20 text-blue-300 px-1 rounded">All</span>
+                </div>
+                <div className="text-[10px] text-slate-400">BI Schema, Mart, etc.</div>
               </div>
             </button>
 
