@@ -30,6 +30,7 @@ interface SchemaSidebarProps {
   onInsertField: (fieldName: string) => void;
   onLoadSample: (datasetId: string) => void;
   onOpenUpload: () => void;
+  onOpenDatabase?: (provider?: 'postgres' | 'aws' | 'snowflake' | 'bigquery') => void;
   onOpenPostgres?: () => void;
   onOpenAws?: () => void;
   onOpenProModal?: () => void;
@@ -45,6 +46,7 @@ export const SchemaSidebar: React.FC<SchemaSidebarProps> = ({
   onInsertField,
   onLoadSample,
   onOpenUpload,
+  onOpenDatabase,
   onOpenPostgres,
   onOpenAws,
   onOpenProModal,
@@ -114,26 +116,15 @@ export const SchemaSidebar: React.FC<SchemaSidebarProps> = ({
             </span>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
-            {onOpenPostgres && (
+            {(onOpenDatabase || onOpenPostgres || onOpenAws) && (
               <button
                 type="button"
-                onClick={onOpenPostgres}
-                className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-indigo-100 bg-indigo-700 hover:bg-indigo-600 rounded transition cursor-pointer shadow-xs border border-indigo-500/40 shrink-0"
-                title="Connect PostgreSQL Database (DBeaver style)"
+                onClick={() => (onOpenDatabase ? onOpenDatabase() : onOpenPostgres ? onOpenPostgres() : onOpenAws?.())}
+                className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded transition cursor-pointer shadow-xs border border-indigo-400/40 shrink-0"
+                title="Connect Database (PostgreSQL, AWS, Snowflake, BigQuery)"
               >
-                <span className="text-xs">🐘</span>
-                <span>Postgres</span>
-              </button>
-            )}
-            {onOpenAws && (
-              <button
-                type="button"
-                onClick={onOpenAws}
-                className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-amber-100 bg-amber-600 hover:bg-amber-500 rounded transition cursor-pointer shadow-xs border border-amber-500/40 shrink-0"
-                title="Connect AWS Cloud Services (Athena, Redshift, S3, RDS)"
-              >
-                <Cloud className="w-3 h-3 text-amber-200" />
-                <span>AWS</span>
+                <Database className="w-3 h-3 text-indigo-200" />
+                <span>Database</span>
               </button>
             )}
             <button
@@ -196,10 +187,10 @@ export const SchemaSidebar: React.FC<SchemaSidebarProps> = ({
               </p>
             </div>
             <div className="space-y-1.5 pt-1 text-left">
-              {onOpenPostgres && (
+              {(onOpenDatabase || onOpenPostgres || onOpenAws) && (
                 <button
                   type="button"
-                  onClick={onOpenPostgres}
+                  onClick={() => (onOpenDatabase ? onOpenDatabase() : onOpenPostgres ? onOpenPostgres() : onOpenAws?.())}
                   className={`w-full text-left p-2.5 rounded-lg border transition flex items-center justify-between group cursor-pointer ${
                     isBright
                       ? 'bg-indigo-50/70 hover:bg-indigo-100/70 border-indigo-200 text-indigo-950 shadow-xs'
@@ -207,42 +198,19 @@ export const SchemaSidebar: React.FC<SchemaSidebarProps> = ({
                   }`}
                 >
                   <div className="flex items-center gap-2.5 truncate">
-                    <span className="text-base shrink-0">🐘</span>
+                    <div className="w-7 h-7 rounded-md bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400 shrink-0">
+                      <Database className="w-3.5 h-3.5" />
+                    </div>
                     <div className="truncate">
                       <div className="text-xs font-semibold group-hover:underline">
-                        Connect PostgreSQL (DBeaver)
+                        Connect Database / Data Warehouse
                       </div>
                       <div className="text-[10px] text-slate-400 font-mono">
-                        Local, Neon, Supabase, or Demo DB
+                        Postgres · AWS · Snowflake · BigQuery
                       </div>
                     </div>
                   </div>
                   <ChevronRight className="w-3.5 h-3.5 text-indigo-400 shrink-0 group-hover:translate-x-0.5 transition-transform" />
-                </button>
-              )}
-
-              {onOpenAws && (
-                <button
-                  type="button"
-                  onClick={onOpenAws}
-                  className={`w-full text-left p-2.5 rounded-lg border transition flex items-center justify-between group cursor-pointer ${
-                    isBright
-                      ? 'bg-amber-50/70 hover:bg-amber-100/70 border-amber-200 text-amber-950 shadow-xs'
-                      : 'bg-amber-950/30 hover:bg-amber-900/40 border-amber-600/40 text-amber-200'
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5 truncate">
-                    <Cloud className="w-4 h-4 text-amber-500 shrink-0" />
-                    <div className="truncate">
-                      <div className="text-xs font-semibold group-hover:underline">
-                        Connect AWS Cloud Services
-                      </div>
-                      <div className="text-[10px] text-slate-400 font-mono">
-                        Athena, Redshift, S3, or Aurora RDS
-                      </div>
-                    </div>
-                  </div>
-                  <ChevronRight className="w-3.5 h-3.5 text-amber-500 shrink-0 group-hover:translate-x-0.5 transition-transform" />
                 </button>
               )}
 
@@ -305,6 +273,10 @@ export const SchemaSidebar: React.FC<SchemaSidebarProps> = ({
                     )}
                     {table.sourceType === 'postgres' ? (
                       <span className="text-xs shrink-0 select-none" title="PostgreSQL Table">🐘</span>
+                    ) : table.sourceType === 'snowflake' ? (
+                      <span className="text-xs shrink-0 select-none" title="Snowflake Table">❄️</span>
+                    ) : table.sourceType === 'bigquery' ? (
+                      <span className="text-xs shrink-0 select-none" title="Google BigQuery Table">🔍</span>
                     ) : table.sourceType === 'aws' || table.sourceType === 'athena' ? (
                       <span className="text-xs shrink-0 select-none" title="Amazon Athena S3 Table">🔶</span>
                     ) : table.sourceType === 'redshift' ? (
@@ -324,6 +296,16 @@ export const SchemaSidebar: React.FC<SchemaSidebarProps> = ({
                     {table.sourceType === 'postgres' && (
                       <span className="text-[9px] font-mono px-1 py-0.2 rounded font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 shrink-0">
                         PG
+                      </span>
+                    )}
+                    {table.sourceType === 'snowflake' && (
+                      <span className="text-[9px] font-mono px-1 py-0.2 rounded font-bold bg-cyan-500/20 text-cyan-400 border border-cyan-500/40 shrink-0">
+                        SNOW
+                      </span>
+                    )}
+                    {table.sourceType === 'bigquery' && (
+                      <span className="text-[9px] font-mono px-1 py-0.2 rounded font-bold bg-blue-500/20 text-blue-300 border border-blue-500/40 shrink-0">
+                        BQ
                       </span>
                     )}
                     {(table.sourceType === 'aws' || table.sourceType === 'athena' || table.sourceType === 'redshift' || table.sourceType === 's3' || table.sourceType === 'rds') && (
@@ -365,6 +347,10 @@ export const SchemaSidebar: React.FC<SchemaSidebarProps> = ({
                     <span className="truncate max-w-[140px]" title={table.connectionName || table.sourceFileName}>
                       {table.sourceType === 'postgres'
                         ? (table.connectionName ? `PG: ${table.connectionName}` : `PostgreSQL: ${table.name}`)
+                        : table.sourceType === 'snowflake'
+                        ? (table.connectionName || `Snowflake: ${table.name}`)
+                        : table.sourceType === 'bigquery'
+                        ? (table.connectionName || `BigQuery: ${table.name}`)
                         : (table.sourceType === 'aws' || table.sourceType === 'athena' || table.sourceType === 'redshift' || table.sourceType === 's3' || table.sourceType === 'rds')
                         ? (table.connectionName || `AWS: ${table.name}`)
                         : (table.sheetName || table.sourceFileName)}

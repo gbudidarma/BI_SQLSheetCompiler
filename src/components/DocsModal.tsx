@@ -449,100 +449,58 @@ ORDER BY total_revenue DESC;`,
     exampleSnippetLang: 'sql'
   },
   {
-    id: 'postgres',
-    title: 'PostgreSQL Connector (DBeaver Style)',
-    badge: 'Database Bridge',
-    badgeColor: 'bg-sky-500/15 text-sky-400 border-sky-500/30',
+    id: 'database',
+    title: 'Enterprise Database Hub (PostgreSQL, AWS, Snowflake, BigQuery)',
+    badge: 'Unified Data Hub',
+    badgeColor: 'bg-indigo-500/15 text-indigo-400 border-indigo-500/30',
     icon: Database,
-    iconColor: 'text-sky-400',
+    iconColor: 'text-indigo-400',
     summary:
-      'Connect SheetSQL directly to local or cloud PostgreSQL databases using a lightweight, zero-dependency Node.js bridge server. Introspect schemas, browse tables, and run queries into SheetSQL memory.',
-    keywords: ['postgres', 'postgresql', 'database', 'dbeaver', 'bridge', 'connector', 'host', 'port', 'schema', 'introspect'],
+      'Connect SheetSQL to your enterprise databases and cloud data warehouses in one unified menu. Query PostgreSQL, Amazon Web Services (Athena, Redshift, S3, RDS), Snowflake Data Cloud, and Google BigQuery right inside your browser.',
+    keywords: ['database', 'postgres', 'postgresql', 'aws', 'athena', 'redshift', 's3', 'snowflake', 'bigquery', 'google', 'warehouse', 'bridge', 'connector'],
     capabilities: [
-      'Zero-dependency bridge: Runs locally via node scripts/postgresBridge.cjs with built-in Chrome Private Network Access headers',
-      'Connects to localhost, Docker, AWS RDS, Supabase, Neon, GCP Cloud SQL, or custom Postgres servers',
-      'Schema introspection: Browse public and custom database schemas, tables, and column data types',
-      'In-memory query execution: Query remote Postgres tables and pull result sets directly into SheetSQL memory for instant charting and modeling'
+      'PostgreSQL: Introspect schemas and query tables from localhost, Docker, AWS RDS, Supabase, Neon, and Azure',
+      'AWS Cloud Suite: Query S3 data lakes via Athena, data warehouses with Redshift, direct CSV/Excel from S3 buckets, and Aurora RDS',
+      'Snowflake Data Cloud: Connect to Snowflake accounts, compute warehouses, databases, and schemas',
+      'Google BigQuery: Query petabyte-scale cloud datasets, GA4 clickstream exports, and multi-region tables',
+      'Instant In-Browser Demo Profiles: Realistic test datasets for each database provider with zero installation required',
+      'Unified Bridge Server: Run "npm run bridge" to query enterprise databases securely without browser CORS or socket limitations',
+      'Cross-Database Joins: Write ANSI SQL joining tables across Snowflake, BigQuery, AWS, PostgreSQL, and local Excel files simultaneously'
     ],
     steps: [
       {
-        title: 'Start the Local Bridge',
-        desc: 'In your terminal, run "node scripts/postgresBridge.cjs" (or "npm run bridge").'
+        title: 'Open the Database Hub',
+        desc: 'Click the "Database" button in the SQL Schema sidebar.'
       },
       {
-        title: 'Open Postgres Modal',
-        desc: 'Click the "Postgres" button in the SQL Studio sidebar.'
+        title: 'Choose Provider',
+        desc: 'Select PostgreSQL, AWS Cloud, Snowflake, or Google BigQuery.'
       },
       {
-        title: 'Enter Credentials & Connect',
-        desc: 'Fill in Host (e.g. localhost), Port (5432), Database, User, Password, and SSL mode, then click "Test & Connect".'
+        title: 'Demo Mode or Local Bridge',
+        desc: 'Pick an Instant Demo profile for immediate exploration, or connect via the local bridge server.'
       },
       {
-        title: 'Browse & Query',
-        desc: 'Explore database tables, view schemas, and click "Query Table" to load records into SheetSQL.'
+        title: 'Discover & Import Tables',
+        desc: 'Click "Test Connection" to auto-discover tables, select what you need, and import into SQL Studio.'
       }
     ],
     proTip:
-      'Because modern browsers block web pages from directly opening raw TCP database sockets, the lightweight local bridge acts as a secure proxy. No third-party software or heavy drivers are required!',
-    exampleSnippet: `# 1. Start the zero-dependency bridge in your terminal:
-node scripts/postgresBridge.cjs
+      'Cross-database analytics in memory! You can run a single SQL query that joins a Snowflake orders fact table with a Google BigQuery marketing dataset and an uploaded Excel spreadsheet.',
+    exampleSnippet: `# 1. Start the unified bridge server:
+npm run bridge
 
-# 2. Output:
-# [Postgres Bridge] Running on http://127.0.0.1:4000
-# [Postgres Bridge] Chrome PNA headers enabled`,
-    exampleSnippetLang: 'bash'
-  },
-  {
-    id: 'aws',
-    title: 'AWS Cloud Connector (Athena, Redshift, S3, RDS)',
-    badge: 'Cloud Suite',
-    badgeColor: 'bg-amber-500/15 text-amber-500 border-amber-500/30',
-    icon: Cloud,
-    iconColor: 'text-amber-500',
-    summary:
-      'Connect SheetSQL to Amazon Web Services data infrastructure: query serverless S3 data lakes with Amazon Athena, analytical warehouses with Amazon Redshift, raw spreadsheets directly from S3 buckets, and relational databases with Amazon RDS/Aurora.',
-    keywords: ['aws', 'amazon', 'athena', 'redshift', 's3', 'rds', 'aurora', 'cloud', 'datalake', 'bucket', 'connector'],
-    capabilities: [
-      'Amazon Athena: Query partitioned S3 parquet/csv data lakes using serverless Presto/Trino SQL execution',
-      'Amazon Redshift: Connect to enterprise Redshift clusters or serverless workgroups via standard port 5439',
-      'Amazon S3: Direct client-side import from S3 presigned URLs or public buckets (CSV, TSV, XLSX, JSON)',
-      'Amazon RDS & Aurora: High-performance connectivity to managed PostgreSQL and MySQL cloud instances',
-      'Instant In-Browser Demo Profiles: Test realistic clickstream logs, financial metrics, and sales warehouse datasets with zero AWS setup required',
-      'Local AWS Bridge Server: Run "npm run bridge:aws" to securely proxy AWS credentials without browser CORS blocks'
-    ],
-    steps: [
-      {
-        title: 'Choose AWS Service & Mode',
-        desc: 'Open the AWS connector from the sidebar and select Athena, Redshift, S3, or RDS/Aurora.'
-      },
-      {
-        title: 'Pick Demo Dataset or Enter Credentials',
-        desc: 'Select an Instant Demo profile for immediate exploration, or enter your AWS Region and cluster/database parameters.'
-      },
-      {
-        title: 'Test & Discover Tables',
-        desc: 'Click "Test Connection" to verify latency and auto-discover tables, views, or S3 objects.'
-      },
-      {
-        title: 'Import & Query in SQL Studio',
-        desc: 'Select the tables you need and click "Import Selected Tables" to execute joins and charts in memory.'
-      }
-    ],
-    proTip:
-      'Combine data across clouds! With SheetSQL, you can JOIN an Amazon Athena clickstream log table with an Excel spreadsheet or a PostgreSQL table using standard ANSI SQL in one unified query.',
-    exampleSnippet: `# 1. Start the zero-dependency AWS bridge:
-npm run bridge:aws
-
-# 2. Example multi-source SQL query across AWS S3 and Local Excel:
+# 2. Example cross-warehouse SQL query joining Snowflake, BigQuery, and Excel:
 SELECT 
-  o.order_id, 
-  o.fiscal_quarter, 
-  o.total_amount, 
-  c.customer_name, 
-  c.region
-FROM redshift_dw_orders o
-JOIN excel_customers c ON o.customer_id = c.id
-WHERE o.total_amount > 5000;`,
+  s.order_id,
+  s.total_amount,
+  b.campaign,
+  b.bounce_rate_pct,
+  e.customer_segment
+FROM snowflake_orders_fact s
+JOIN bigquery_traffic_sources b ON s.channel = b.source
+JOIN excel_segments e ON s.customer_id = e.id
+WHERE s.total_amount > 1000;`,
     exampleSnippetLang: 'sql'
   },
   {

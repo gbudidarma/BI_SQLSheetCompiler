@@ -12,8 +12,8 @@
 
 ## 🚀 Key Features
 
-- **AWS Cloud Connector**: Connect to Amazon Athena (S3 Data Lake SQL), Amazon Redshift (Cloud Data Warehouse), Amazon S3 (Direct CSV/Excel file loading), and Amazon RDS/Aurora (Managed PostgreSQL & MySQL). Features Instant In-Browser Demo Datasets, direct S3 presigned URL support, and a local Node.js AWS Bridge server (`npm run bridge:aws`).
-- **PostgreSQL Connector**: Connect to local or cloud PostgreSQL databases (Docker, RDS, Supabase, Neon) with schema introspection and query execution via a zero-dependency local bridge server (`npm run bridge`).
+- **Unified Enterprise Database Hub**: Connect to **PostgreSQL**, **AWS Cloud** (Athena, Redshift, S3, RDS/Aurora), **Snowflake**, and **Google BigQuery** all in 1 unified "Database" menu. Features Instant In-Browser Demo Profiles for every provider, real-time connection latency testing, automated table schema introspection, and a zero-dependency local bridge server (`npm run bridge`).
+- **Cross-Database SQL Analytics**: Query and join tables across Snowflake, BigQuery, AWS, PostgreSQL, and local Excel/CSV spreadsheets simultaneously in memory using standard ANSI SQL.
 - **Data Modeler (ERD)**: Interactive Entity-Relationship Diagram generator with automatic key detection, visual schema exploration, and drag-and-drop join builder.
 - **Schema & Data Comparator**: Side-by-side table schema comparisons and row diffing to spot structural discrepancies between files or versions.
 - **Duplicate Checker**: Deep duplicate analysis across single or composite keys with one-click deduplication and clean table export.

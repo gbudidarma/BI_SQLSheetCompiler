@@ -13,8 +13,7 @@ import { UploadModal } from './components/UploadModal';
 import { TablePreviewModal } from './components/TablePreviewModal';
 import { QueryHistoryModal } from './components/QueryHistoryModal';
 import { DocsModal } from './components/DocsModal';
-import { PostgresConnectionModal } from './components/PostgresConnectionModal';
-import { AwsConnectionModal } from './components/AwsConnectionModal';
+import { DatabaseConnectionModal, DatabaseProvider } from './components/DatabaseConnectionModal';
 import { ProLicenseModal } from './components/ProLicenseModal';
 import { DataModeler } from './components/DataModeler';
 import { SchemaDataComparator } from './components/SchemaDataComparator';
@@ -53,8 +52,8 @@ export default function App() {
 
   // Modals state
   const [isUploadOpen, setIsUploadOpen] = useState<boolean>(false);
-  const [isPostgresOpen, setIsPostgresOpen] = useState<boolean>(false);
-  const [isAwsOpen, setIsAwsOpen] = useState<boolean>(false);
+  const [isDatabaseOpen, setIsDatabaseOpen] = useState<boolean>(false);
+  const [selectedDatabaseProvider, setSelectedDatabaseProvider] = useState<DatabaseProvider>('postgres');
   const [isProModalOpen, setIsProModalOpen] = useState<boolean>(false);
   const [previewTable, setPreviewTable] = useState<TableSchema | null>(null);
   const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
@@ -388,8 +387,10 @@ export default function App() {
                 }}
                 onLoadSample={loadSampleDataset}
                 onOpenUpload={() => setIsUploadOpen(true)}
-                onOpenPostgres={() => setIsPostgresOpen(true)}
-                onOpenAws={() => setIsAwsOpen(true)}
+                onOpenDatabase={(provider) => {
+                  if (provider) setSelectedDatabaseProvider(provider);
+                  setIsDatabaseOpen(true);
+                }}
                 onOpenProModal={() => setIsProModalOpen(true)}
                 onOpenVisualizer={(tblName) => {
                   setVisualizerInitialTable(tblName);
@@ -628,18 +629,12 @@ export default function App() {
         onLoadSample={loadSampleDataset}
       />
 
-      <PostgresConnectionModal
-        isOpen={isPostgresOpen}
-        onClose={() => setIsPostgresOpen(false)}
+      <DatabaseConnectionModal
+        isOpen={isDatabaseOpen}
+        onClose={() => setIsDatabaseOpen(false)}
         onTablesLoaded={handleTablesLoaded}
         onOpenProModal={() => setIsProModalOpen(true)}
-      />
-
-      <AwsConnectionModal
-        isOpen={isAwsOpen}
-        onClose={() => setIsAwsOpen(false)}
-        onTablesLoaded={handleTablesLoaded}
-        onOpenProModal={() => setIsProModalOpen(true)}
+        initialProvider={selectedDatabaseProvider}
       />
 
       <ProLicenseModal
