@@ -6,16 +6,17 @@
 
 🌐 **Live Demo Website:** [https://gbudidarma.github.io/BI_SQLSheetCompiler/](https://gbudidarma.github.io/BI_SQLSheetCompiler/)
 
-**SheetSQL Compiler** is a client-side SQL analytics, data modeling, BI engineering, and time-series forecasting web application. Run SQL directly against spreadsheets (Excel `.xlsx` and CSV) right inside the browser with zero database setup required.
+**SheetSQL Compiler** is a client-side SQL analytics, data modeling, BI engineering, and time-series forecasting web application. Run SQL directly against spreadsheets (Excel `.xlsx` and CSV) and connect to cloud data warehouses right inside your browser with zero database installation required.
 
 ---
 
 ## 🚀 Key Features
 
-- **Unified Enterprise Database Hub**: Connect to **PostgreSQL**, **AWS Cloud** (Athena, Redshift, S3, RDS/Aurora), **Snowflake**, and **Google BigQuery** all in 1 unified "Database" menu. Features Instant In-Browser Demo Profiles for every provider, real-time connection latency testing, automated table schema introspection, and a zero-dependency local bridge server (`npm run bridge`).
+- **Unified Enterprise Database Hub**: Connect to **PostgreSQL**, **AWS Cloud** (Athena, Redshift, S3, RDS/Aurora), **Snowflake**, and **Google BigQuery** all in 1 unified "Database" menu. Includes automated table introspection, real-time connection latency measurement, and instant in-browser demo datasets.
 - **Cross-Database SQL Analytics**: Query and join tables across Snowflake, BigQuery, AWS, PostgreSQL, and local Excel/CSV spreadsheets simultaneously in memory using standard ANSI SQL.
+- **SQL Studio**: Execute ANSI-style SQL queries on in-memory tables powered by AlaSQL. Features syntax highlighting, query history, quick code snippets, intelligent auto-suggest, and instant result export.
 - **Data Modeler (ERD)**: Interactive Entity-Relationship Diagram generator with automatic key detection, visual schema exploration, and drag-and-drop join builder.
-- **Schema & Data Comparator**: Side-by-side table schema comparisons and row diffing to spot structural discrepancies between files or versions.
+- **Schema & Data Comparator**: Side-by-side table schema comparisons and row diffing to spot structural discrepancies between files, databases, or versions.
 - **Duplicate Checker**: Deep duplicate analysis across single or composite keys with one-click deduplication and clean table export.
 - **Visualizer Studio**: Drag-and-drop business intelligence charting tool for bar, line, area, and pie charts with aggregate measures.
 - **BI Schema & SCD Builder**: Transform flat transaction spreadsheets into dimensional Star Schemas with Slowly Changing Dimensions (SCD Type 1 & Type 2), Surrogate Key generators, and DDL/DML export.
@@ -24,11 +25,44 @@
 
 ---
 
+## 🔌 Supported Database & Cloud Connectors
+
+All data sources are accessible in one unified **"Database"** menu in the SQL Schema sidebar:
+
+| Provider | Supported Services / Engines | Execution Modes |
+| :--- | :--- | :--- |
+| **PostgreSQL** 🐘 | Localhost, Docker, Neon, Supabase, Azure, AWS RDS, GCP Cloud SQL | Instant Demo Profile, Local Bridge |
+| **AWS Cloud** ☁️ | **Amazon Athena** (S3 Data Lake), **Amazon Redshift** (Data Warehouse), **Amazon S3** (Buckets & Presigned URLs), **Amazon RDS / Aurora** | Instant Demo Profile, Direct S3 Fetch, Local Bridge |
+| **Snowflake** ❄️ | Snowflake Data Cloud (Warehouses, Databases, Schemas, Roles) | Instant Demo Profile, Local Bridge |
+| **Google BigQuery** 🔍 | Petabyte-scale analytics, GA4 clickstream exports, multi-region datasets | Instant Demo Profile, Local Bridge |
+
+### 💡 Cross-Warehouse SQL Example
+Query across cloud data warehouses and local spreadsheets in a single query:
+
+```sql
+SELECT 
+  s.order_id,
+  s.order_date,
+  s.total_amount,
+  b.campaign,
+  b.bounce_rate_pct,
+  e.customer_name,
+  e.loyalty_tier
+FROM snowflake_orders_fact s
+JOIN bigquery_traffic_sources b ON s.store_id = b.source
+JOIN excel_customers e ON s.customer_id = e.customer_id
+WHERE s.total_amount > 1000
+ORDER BY s.total_amount DESC;
+```
+
+---
+
 ## 🛠️ Tech Stack
 
 - **Framework**: React 19 + TypeScript + Vite
 - **Styling**: Tailwind CSS (Default Dark Mode & Bright Mode support)
 - **SQL Engine**: AlaSQL (100% in-browser SQL execution)
+- **Database Bridge**: Zero-dependency Node.js bridge server (`http`/`https` with Chrome Private Network Access headers)
 - **File Parsing**: SheetJS (`xlsx`), JSZip, PapaParse
 - **Icons**: Lucide React
 - **Deployment**: GitHub Pages via GitHub Actions (Bun)
@@ -63,7 +97,13 @@
    npm run dev
    ```
 
-4. **Build for production:**
+4. **(Optional) Start the local Database Bridge:**
+   To connect to real PostgreSQL databases, AWS endpoints, Snowflake, or BigQuery without browser socket limitations:
+   ```bash
+   npm run bridge
+   ```
+
+5. **Build for production:**
    ```bash
    bun run build
    # or
