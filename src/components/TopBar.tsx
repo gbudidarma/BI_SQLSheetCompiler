@@ -378,7 +378,6 @@ export const TopBar: React.FC<TopBarProps> = ({
                   <div className="text-[10px] text-slate-400">Past executed queries</div>
                 </div>
               </button>
-              </button>
 
               <div className="my-1 border-t border-[#162544]" />
 

@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "bridge": "node scripts/postgresBridge.cjs",
+    "bridge:aws": "node scripts/awsBridge.cjs",
     "gen-key": "node scripts/generateLicenseKey.cjs",
     "lint": "tsc --noEmit"
   },

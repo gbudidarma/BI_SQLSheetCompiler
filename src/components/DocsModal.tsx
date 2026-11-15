@@ -21,7 +21,8 @@ import {
   ExternalLink,
   ArrowRight,
   Filter,
-  Lightbulb
+  Lightbulb,
+  Cloud
 } from 'lucide-react';
 import { highlightSql } from '../utils/sqlHighlighter';
 import { useTheme } from '../context/ThemeContext';
@@ -490,6 +491,59 @@ node scripts/postgresBridge.cjs
 # [Postgres Bridge] Running on http://127.0.0.1:4000
 # [Postgres Bridge] Chrome PNA headers enabled`,
     exampleSnippetLang: 'bash'
+  },
+  {
+    id: 'aws',
+    title: 'AWS Cloud Connector (Athena, Redshift, S3, RDS)',
+    badge: 'Cloud Suite',
+    badgeColor: 'bg-amber-500/15 text-amber-500 border-amber-500/30',
+    icon: Cloud,
+    iconColor: 'text-amber-500',
+    summary:
+      'Connect SheetSQL to Amazon Web Services data infrastructure: query serverless S3 data lakes with Amazon Athena, analytical warehouses with Amazon Redshift, raw spreadsheets directly from S3 buckets, and relational databases with Amazon RDS/Aurora.',
+    keywords: ['aws', 'amazon', 'athena', 'redshift', 's3', 'rds', 'aurora', 'cloud', 'datalake', 'bucket', 'connector'],
+    capabilities: [
+      'Amazon Athena: Query partitioned S3 parquet/csv data lakes using serverless Presto/Trino SQL execution',
+      'Amazon Redshift: Connect to enterprise Redshift clusters or serverless workgroups via standard port 5439',
+      'Amazon S3: Direct client-side import from S3 presigned URLs or public buckets (CSV, TSV, XLSX, JSON)',
+      'Amazon RDS & Aurora: High-performance connectivity to managed PostgreSQL and MySQL cloud instances',
+      'Instant In-Browser Demo Profiles: Test realistic clickstream logs, financial metrics, and sales warehouse datasets with zero AWS setup required',
+      'Local AWS Bridge Server: Run "npm run bridge:aws" to securely proxy AWS credentials without browser CORS blocks'
+    ],
+    steps: [
+      {
+        title: 'Choose AWS Service & Mode',
+        desc: 'Open the AWS connector from the sidebar and select Athena, Redshift, S3, or RDS/Aurora.'
+      },
+      {
+        title: 'Pick Demo Dataset or Enter Credentials',
+        desc: 'Select an Instant Demo profile for immediate exploration, or enter your AWS Region and cluster/database parameters.'
+      },
+      {
+        title: 'Test & Discover Tables',
+        desc: 'Click "Test Connection" to verify latency and auto-discover tables, views, or S3 objects.'
+      },
+      {
+        title: 'Import & Query in SQL Studio',
+        desc: 'Select the tables you need and click "Import Selected Tables" to execute joins and charts in memory.'
+      }
+    ],
+    proTip:
+      'Combine data across clouds! With SheetSQL, you can JOIN an Amazon Athena clickstream log table with an Excel spreadsheet or a PostgreSQL table using standard ANSI SQL in one unified query.',
+    exampleSnippet: `# 1. Start the zero-dependency AWS bridge:
+npm run bridge:aws
+
+# 2. Example multi-source SQL query across AWS S3 and Local Excel:
+SELECT 
+  o.order_id, 
+  o.fiscal_quarter, 
+  o.total_amount, 
+  c.customer_name, 
+  c.region
+FROM redshift_dw_orders o
+JOIN excel_customers c ON o.customer_id = c.id
+WHERE o.total_amount > 5000;`,
+    exampleSnippetLang: 'sql'
   },
   {
     id: 'pro',

@@ -29,7 +29,7 @@ function sha256Sync(ascii: string): string {
 
   const mathPow = Math.pow;
   const maxWord = mathPow(2, 32);
-  let lengthProperty = 'length';
+  const lengthProperty = 'length';
   let i = 0, j = 0;
   let result = '';
 

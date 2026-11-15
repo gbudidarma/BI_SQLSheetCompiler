@@ -18,7 +18,7 @@ export interface TableSchema {
   columns: ColumnInfo[];
   previewRows: Record<string, any>[];
   allRows?: Record<string, any>[];
-  sourceType?: 'excel' | 'postgres';
+  sourceType?: 'excel' | 'postgres' | 'aws' | 'athena' | 'redshift' | 's3' | 'rds';
   connectionName?: string;
 }
 

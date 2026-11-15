@@ -13,7 +13,8 @@ import {
   FileSpreadsheet,
   Layers,
   Sparkles,
-  PieChart
+  PieChart,
+  Cloud
 } from 'lucide-react';
 import { TableSchema } from '../types';
 import { SAMPLE_DATASETS } from '../utils/sampleData';
@@ -30,6 +31,7 @@ interface SchemaSidebarProps {
   onLoadSample: (datasetId: string) => void;
   onOpenUpload: () => void;
   onOpenPostgres?: () => void;
+  onOpenAws?: () => void;
   onOpenProModal?: () => void;
   onOpenVisualizer?: (tableName: string) => void;
 }
@@ -44,6 +46,7 @@ export const SchemaSidebar: React.FC<SchemaSidebarProps> = ({
   onLoadSample,
   onOpenUpload,
   onOpenPostgres,
+  onOpenAws,
   onOpenProModal,
   onOpenVisualizer,
 }) => {
@@ -120,6 +123,17 @@ export const SchemaSidebar: React.FC<SchemaSidebarProps> = ({
               >
                 <span className="text-xs">🐘</span>
                 <span>Postgres</span>
+              </button>
+            )}
+            {onOpenAws && (
+              <button
+                type="button"
+                onClick={onOpenAws}
+                className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-amber-100 bg-amber-600 hover:bg-amber-500 rounded transition cursor-pointer shadow-xs border border-amber-500/40 shrink-0"
+                title="Connect AWS Cloud Services (Athena, Redshift, S3, RDS)"
+              >
+                <Cloud className="w-3 h-3 text-amber-200" />
+                <span>AWS</span>
               </button>
             )}
             <button
@@ -207,6 +221,31 @@ export const SchemaSidebar: React.FC<SchemaSidebarProps> = ({
                 </button>
               )}
 
+              {onOpenAws && (
+                <button
+                  type="button"
+                  onClick={onOpenAws}
+                  className={`w-full text-left p-2.5 rounded-lg border transition flex items-center justify-between group cursor-pointer ${
+                    isBright
+                      ? 'bg-amber-50/70 hover:bg-amber-100/70 border-amber-200 text-amber-950 shadow-xs'
+                      : 'bg-amber-950/30 hover:bg-amber-900/40 border-amber-600/40 text-amber-200'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 truncate">
+                    <Cloud className="w-4 h-4 text-amber-500 shrink-0" />
+                    <div className="truncate">
+                      <div className="text-xs font-semibold group-hover:underline">
+                        Connect AWS Cloud Services
+                      </div>
+                      <div className="text-[10px] text-slate-400 font-mono">
+                        Athena, Redshift, S3, or Aurora RDS
+                      </div>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-3.5 h-3.5 text-amber-500 shrink-0 group-hover:translate-x-0.5 transition-transform" />
+                </button>
+              )}
+
               {SAMPLE_DATASETS.map((ds) => (
                 <button
                   key={ds.id}
@@ -266,6 +305,14 @@ export const SchemaSidebar: React.FC<SchemaSidebarProps> = ({
                     )}
                     {table.sourceType === 'postgres' ? (
                       <span className="text-xs shrink-0 select-none" title="PostgreSQL Table">🐘</span>
+                    ) : table.sourceType === 'aws' || table.sourceType === 'athena' ? (
+                      <span className="text-xs shrink-0 select-none" title="Amazon Athena S3 Table">🔶</span>
+                    ) : table.sourceType === 'redshift' ? (
+                      <span className="text-xs shrink-0 select-none" title="Amazon Redshift DW Table">🔴</span>
+                    ) : table.sourceType === 's3' ? (
+                      <span className="text-xs shrink-0 select-none" title="Amazon S3 Object">🪣</span>
+                    ) : table.sourceType === 'rds' ? (
+                      <span className="text-xs shrink-0 select-none" title="Amazon RDS Aurora Table">🐬</span>
                     ) : (
                       <TableIcon className="w-3.5 h-3.5 text-blue-500 shrink-0" />
                     )}
@@ -277,6 +324,11 @@ export const SchemaSidebar: React.FC<SchemaSidebarProps> = ({
                     {table.sourceType === 'postgres' && (
                       <span className="text-[9px] font-mono px-1 py-0.2 rounded font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 shrink-0">
                         PG
+                      </span>
+                    )}
+                    {(table.sourceType === 'aws' || table.sourceType === 'athena' || table.sourceType === 'redshift' || table.sourceType === 's3' || table.sourceType === 'rds') && (
+                      <span className="text-[9px] font-mono px-1 py-0.2 rounded font-bold bg-amber-500/20 text-amber-500 dark:text-amber-300 border border-amber-500/40 shrink-0">
+                        AWS
                       </span>
                     )}
                   </div>
@@ -313,6 +365,8 @@ export const SchemaSidebar: React.FC<SchemaSidebarProps> = ({
                     <span className="truncate max-w-[140px]" title={table.connectionName || table.sourceFileName}>
                       {table.sourceType === 'postgres'
                         ? (table.connectionName ? `PG: ${table.connectionName}` : `PostgreSQL: ${table.name}`)
+                        : (table.sourceType === 'aws' || table.sourceType === 'athena' || table.sourceType === 'redshift' || table.sourceType === 's3' || table.sourceType === 'rds')
+                        ? (table.connectionName || `AWS: ${table.name}`)
                         : (table.sheetName || table.sourceFileName)}
                     </span>
                     <div className="flex items-center gap-1">

@@ -12,7 +12,8 @@
 
 ## 🚀 Key Features
 
-- **SQL Studio**: Execute ANSI-style SQL queries on in-memory tables powered by AlaSQL. Features syntax highlighting, query history, quick code snippets, intelligent auto-suggest, and instant result export.
+- **AWS Cloud Connector**: Connect to Amazon Athena (S3 Data Lake SQL), Amazon Redshift (Cloud Data Warehouse), Amazon S3 (Direct CSV/Excel file loading), and Amazon RDS/Aurora (Managed PostgreSQL & MySQL). Features Instant In-Browser Demo Datasets, direct S3 presigned URL support, and a local Node.js AWS Bridge server (`npm run bridge:aws`).
+- **PostgreSQL Connector**: Connect to local or cloud PostgreSQL databases (Docker, RDS, Supabase, Neon) with schema introspection and query execution via a zero-dependency local bridge server (`npm run bridge`).
 - **Data Modeler (ERD)**: Interactive Entity-Relationship Diagram generator with automatic key detection, visual schema exploration, and drag-and-drop join builder.
 - **Schema & Data Comparator**: Side-by-side table schema comparisons and row diffing to spot structural discrepancies between files or versions.
 - **Duplicate Checker**: Deep duplicate analysis across single or composite keys with one-click deduplication and clean table export.
