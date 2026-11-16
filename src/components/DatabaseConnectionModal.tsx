@@ -228,6 +228,8 @@ export const DatabaseConnectionModal: React.FC<DatabaseConnectionModalProps> = (
 
   // UI shared states
   const [showPassword, setShowPassword] = useState(false);
+  const [showMcpTokenHelp, setShowMcpTokenHelp] = useState(false);
+  const [copiedTokenCmd, setCopiedTokenCmd] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{
     success: boolean;
@@ -1657,9 +1659,13 @@ export default {
                           <label className={`block text-[11px] font-semibold ${isBright ? 'text-slate-600' : 'text-slate-400'}`}>
                             OAuth / Bearer Token
                           </label>
-                          <span className="text-[10px] text-slate-400">
-                            Required for authenticated endpoints like <code className="text-purple-300 font-mono">mcp.coros.com</code>
-                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setShowMcpTokenHelp(!showMcpTokenHelp)}
+                            className="text-[11px] text-purple-400 hover:text-purple-300 font-medium underline cursor-pointer flex items-center gap-1"
+                          >
+                            <span>{showMcpTokenHelp ? 'Hide Token Guide' : '🔑 How to get token?'}</span>
+                          </button>
                         </div>
                         <input
                           type="password"
@@ -1670,7 +1676,53 @@ export default {
                             isBright ? 'bg-white border-slate-300 text-slate-800' : 'bg-[#080d1a] border-[#1b2b4d] text-slate-200'
                           }`}
                         />
-                        <div className="text-[10px] text-slate-400 mt-1 flex items-center gap-1">
+
+                        {showMcpTokenHelp && (
+                          <div className={`mt-2 p-3 rounded-xl border text-[11px] space-y-2 animate-in fade-in ${
+                            isBright ? 'bg-purple-50/70 border-purple-200 text-slate-700' : 'bg-[#150e26] border-purple-800/40 text-purple-200'
+                          }`}>
+                            <div className="font-semibold text-purple-300 flex items-center justify-between">
+                              <span className="flex items-center gap-1">
+                                <Key className="w-3.5 h-3.5 text-purple-400" />
+                                <span>Get COROS OAuth Token via Official CLI (1 Step)</span>
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  navigator.clipboard.writeText('npx coros-mcp login');
+                                  setCopiedTokenCmd(true);
+                                  setTimeout(() => setCopiedTokenCmd(false), 2000);
+                                }}
+                                className="px-2 py-0.5 rounded bg-purple-500/20 hover:bg-purple-500/30 text-purple-200 flex items-center gap-1 text-[10px] cursor-pointer"
+                              >
+                                {copiedTokenCmd ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                                <span>{copiedTokenCmd ? 'Copied!' : 'Copy Command'}</span>
+                              </button>
+                            </div>
+                            <ol className="list-decimal list-inside space-y-1.5 text-slate-300 text-[11px]">
+                              <li>
+                                Run in your terminal:
+                                <div className="mt-1 font-mono text-[10px] bg-black/50 px-2 py-1.5 rounded-lg border border-purple-900/40 text-purple-300 flex items-center justify-between">
+                                  <span>npx coros-mcp login</span>
+                                </div>
+                              </li>
+                              <li>
+                                Open the printed link (<code className="text-purple-300 font-mono text-[10px]">https://mcpus.coros.com/cli/login/...</code>) in your browser and authorize your COROS account.
+                              </li>
+                              <li>
+                                Read the saved token file:
+                                <div className="mt-1 font-mono text-[10px] bg-black/50 px-2 py-1.5 rounded-lg border border-purple-900/40 text-slate-300">
+                                  cat ~/.coros-mcp-skill-gateway-ts/us/token.json
+                                </div>
+                              </li>
+                              <li>
+                                Copy the <code className="text-purple-300 font-mono">access_token</code> string and paste it into the field above! (Valid for 30 days).
+                              </li>
+                            </ol>
+                          </div>
+                        )}
+
+                        <div className="text-[10px] text-slate-400 mt-1.5 flex items-center gap-1">
                           <span>Tip: If testing without a COROS token yet, switch mode to</span>
                           <button
                             type="button"
