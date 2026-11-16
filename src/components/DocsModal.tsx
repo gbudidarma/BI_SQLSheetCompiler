@@ -450,23 +450,24 @@ ORDER BY total_revenue DESC;`,
   },
   {
     id: 'database',
-    title: 'Enterprise Database Hub (PostgreSQL, AWS, Snowflake, BigQuery)',
-    badge: 'Zero-Bridge & Direct REST',
+    title: 'Enterprise Database & MCP Hub (PostgreSQL, AWS, Snowflake, BigQuery, MCP)',
+    badge: 'Zero-Bridge, Direct REST & MCP',
     badgeColor: 'bg-indigo-500/15 text-indigo-400 border-indigo-500/30',
     icon: Database,
     iconColor: 'text-indigo-400',
     summary:
-      'Connect SheetSQL to your enterprise databases and cloud data warehouses with or without a local bridge. Query PostgreSQL, Amazon Web Services (Athena, Redshift, S3, RDS), Snowflake Data Cloud, and Google BigQuery right inside your browser.',
-    keywords: ['database', 'postgres', 'postgresql', 'aws', 'athena', 'redshift', 's3', 'snowflake', 'bigquery', 'google', 'warehouse', 'bridge', 'connector', 'neon', 'supabase', 'cloudflare worker', 'paste sql'],
+      'Connect SheetSQL to your enterprise databases, cloud data warehouses, and remote Model Context Protocol (MCP) servers (e.g. https://mcp.coros.com/mcp) with or without a local bridge.',
+    keywords: ['database', 'postgres', 'postgresql', 'aws', 'athena', 'redshift', 's3', 'snowflake', 'bigquery', 'google', 'warehouse', 'bridge', 'connector', 'neon', 'supabase', 'cloudflare worker', 'paste sql', 'mcp', 'coros', 'model context protocol'],
     capabilities: [
+      'Model Context Protocol (MCP): Connect to remote MCP servers (such as COROS Wearables at https://mcp.coros.com/mcp or local SSE endpoints) to discover tools and query telemetry directly into AlaSQL',
       'Zero-Bridge Direct Cloud REST: Direct HTTP queries to Neon Serverless PostgreSQL and Supabase PostgREST without any bridge server',
       'Direct S3 Presigned URLs: Download and parse CSV, TSV, JSON, and XLSX files from Amazon S3 directly in-browser',
       'Snowflake & BigQuery REST APIs: Connect with OAuth or Bearer tokens directly over HTTPS',
       'Direct SQL & CSV Paste Ingester: Paste raw SQL DDL/INSERT statements, DBeaver/pgAdmin/Snowsight query grids, or CSV/TSV data for 100% offline in-browser import',
       'Free Cloudflare Worker Gateway: Deploy a free 25-line Cloudflare Worker in 30 seconds for 24/7 serverless cloud proxying',
       'Local Node.js Bridge Server: Run "npm run bridge" when developing locally with private localhost/Docker databases',
-      'Instant In-Browser Demo Profiles: Test datasets for each provider ready for immediate querying with zero setup',
-      'Cross-Database Joins: Join Snowflake, BigQuery, AWS, PostgreSQL, and local Excel files in a single unified SQL query'
+      'Instant In-Browser Demo Profiles: Test datasets for each provider (including COROS GPS workouts, HRV, and acute:chronic training load) ready for immediate querying with zero setup',
+      'Cross-Database Joins: Join Snowflake, BigQuery, AWS, PostgreSQL, MCP servers, and local Excel files in a single unified SQL query'
     ],
     steps: [
       {
@@ -475,7 +476,7 @@ ORDER BY total_revenue DESC;`,
       },
       {
         title: 'Choose Provider & Mode',
-        desc: 'Select PostgreSQL, AWS Cloud, Snowflake, or BigQuery. Choose Direct Cloud API (Neon/Supabase/S3), Cloud Gateway, or Offline SQL/CSV Paste.'
+        desc: 'Select PostgreSQL, AWS Cloud, Snowflake, BigQuery, or MCP Server. Choose Direct Cloud API, MCP Server, Cloud Gateway, or Offline SQL/CSV Paste.'
       },
       {
         title: 'Zero-Bridge Connection or Paste',

@@ -31,7 +31,8 @@ import {
   Globe,
   Zap,
   Code2,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Bot
 } from 'lucide-react';
 import { TableSchema } from '../types';
 import { useTheme } from '../context/ThemeContext';
@@ -88,13 +89,25 @@ import {
   importBigQueryTable
 } from '../utils/bigqueryConnector';
 
+// MCP Connector (Model Context Protocol, e.g. https://mcp.coros.com/mcp)
+import {
+  McpConnectionConfig,
+  McpTestResult,
+  McpDiscoveredResource,
+  DEMO_COROS_PROFILE,
+  testMcpConnection,
+  fetchMcpResources,
+  importMcpResource,
+  getCorosDemoDataset
+} from '../utils/mcpConnector';
+
 // Direct Offline SQL / CSV Paste Ingester (Zero-Bridge Alternative)
 import {
   detectPasteFormat,
   ingestPastedData
 } from '../utils/sqlPasteIngester';
 
-export type DatabaseProvider = 'postgres' | 'aws' | 'snowflake' | 'bigquery';
+export type DatabaseProvider = 'postgres' | 'aws' | 'snowflake' | 'bigquery' | 'mcp';
 
 interface DatabaseConnectionModalProps {
   isOpen: boolean;
@@ -194,7 +207,16 @@ export const DatabaseConnectionModal: React.FC<DatabaseConnectionModalProps> = (
   });
 
   // ==========================================
-  // 5. Offline Direct SQL / CSV Paste State
+  // 5. MCP Server State (e.g. https://mcp.coros.com/mcp)
+  // ==========================================
+  const [mcpConfig, setMcpConfig] = useState<McpConnectionConfig>({
+    endpointUrl: 'https://mcp.coros.com/mcp',
+    authToken: '',
+    mode: 'direct',
+  });
+
+  // ==========================================
+  // 6. Offline Direct SQL / CSV Paste State
   // ==========================================
   const [pasteText, setPasteText] = useState('');
   const [pasteTableName, setPasteTableName] = useState('');
@@ -367,6 +389,24 @@ export const DatabaseConnectionModal: React.FC<DatabaseConnectionModalProps> = (
             error: res.error,
           });
         }
+      } else if (activeProvider === 'mcp') {
+        const res = await testMcpConnection(mcpConfig);
+        if (res.success) {
+          setTestResult({
+            success: true,
+            latencyMs: res.latencyMs,
+            title: `Connected to MCP Server (${res.serverName})`,
+            details: `Protocol: ${res.protocolVersion} · Discovered ${res.toolsCount} Tools`,
+          });
+          handleFetchTables();
+        } else {
+          setTestResult({
+            success: false,
+            latencyMs: res.latencyMs,
+            title: 'MCP Server Connection Failed',
+            error: res.error,
+          });
+        }
       }
     } catch (err: any) {
       setTestResult({
@@ -417,6 +457,14 @@ export const DatabaseConnectionModal: React.FC<DatabaseConnectionModalProps> = (
           schema: t.dataset,
           rowCount: t.rowCount,
           columnCount: t.columnCount,
+        }));
+      } else if (activeProvider === 'mcp') {
+        const resources = await fetchMcpResources(mcpConfig);
+        items = resources.map((r) => ({
+          name: r.name,
+          schema: r.schema,
+          rowCount: r.rowCount,
+          columnCount: r.columnCount,
         }));
       }
 
@@ -478,6 +526,9 @@ export const DatabaseConnectionModal: React.FC<DatabaseConnectionModalProps> = (
           importedItems.push(res);
         } else if (activeProvider === 'bigquery') {
           const res = await importBigQueryTable(bqConfig, tblName, bqConfig.datasetId);
+          importedItems.push(res);
+        } else if (activeProvider === 'mcp') {
+          const res = await importMcpResource(mcpConfig, tblName);
           importedItems.push(res);
         }
       }
@@ -631,7 +682,7 @@ export default {
                 </span>
               </div>
               <p className={`text-[11px] ${isBright ? 'text-slate-600' : 'text-slate-400'}`}>
-                Connect to PostgreSQL, AWS Cloud, Snowflake, and BigQuery directly in your browser without requiring a local bridge server
+                Connect to PostgreSQL, AWS Cloud, Snowflake, BigQuery, and Model Context Protocol (MCP) servers directly in your browser
               </p>
             </div>
           </div>
@@ -646,9 +697,9 @@ export default {
           </button>
         </div>
 
-        {/* TOP LEVEL DATABASE PROVIDER SELECTOR */}
+        {/* TOP LEVEL DATABASE PROVIDER SELECTOR (5 Options) */}
         <div
-          className={`grid grid-cols-4 p-2 gap-1.5 border-b select-none ${
+          className={`grid grid-cols-2 sm:grid-cols-5 p-2 gap-1.5 border-b select-none ${
             isBright ? 'bg-slate-50 border-slate-200' : 'bg-[#060b17] border-[#121f38]'
           }`}
         >
@@ -726,6 +777,25 @@ export default {
           >
             <span className="text-sm">🔍</span>
             <span className="truncate font-semibold">BigQuery</span>
+          </button>
+
+          {/* 5. MCP Server (e.g. mcp.coros.com) */}
+          <button
+            type="button"
+            onClick={() => {
+              setActiveProvider('mcp');
+              setSubTab('params');
+            }}
+            className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs transition cursor-pointer border ${
+              activeProvider === 'mcp'
+                ? 'bg-purple-600 text-white font-bold border-purple-500 shadow-xs'
+                : isBright
+                ? 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
+                : 'bg-[#0c162e] hover:bg-[#14264d] text-slate-300 border-[#1a2f59]'
+            }`}
+          >
+            <span className="text-sm">🤖</span>
+            <span className="truncate font-semibold">MCP Server</span>
           </button>
         </div>
 
@@ -820,7 +890,9 @@ export default {
                         ? awsConfig.mode
                         : activeProvider === 'snowflake'
                         ? snowConfig.mode.replace('_', ' ')
-                        : bqConfig.mode.replace('_', ' ')}
+                        : activeProvider === 'bigquery'
+                        ? bqConfig.mode.replace('_', ' ')
+                        : mcpConfig.mode}
                     </span>
                   </div>
                   <div className={`text-[11px] ${isBright ? 'text-slate-600' : 'text-slate-400'}`}>
@@ -992,6 +1064,34 @@ export default {
                         }`}
                       >
                         🧪 Demo
+                      </button>
+                    </>
+                  )}
+
+                  {/* MCP Modes */}
+                  {activeProvider === 'mcp' && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setMcpConfig((p) => ({ ...p, mode: 'direct' }))}
+                        className={`px-2 py-1 text-xs rounded-md transition cursor-pointer font-medium ${
+                          mcpConfig.mode === 'direct'
+                            ? 'bg-purple-600 text-white font-bold shadow-xs'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        ⚡ Direct MCP HTTP
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMcpConfig((p) => ({ ...p, mode: 'demo' }))}
+                        className={`px-2 py-1 text-xs rounded-md transition cursor-pointer font-medium ${
+                          mcpConfig.mode === 'demo'
+                            ? 'bg-purple-600 text-white font-bold shadow-xs'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        🧪 COROS Demo Profile
                       </button>
                     </>
                   )}
@@ -1500,6 +1600,92 @@ export default {
                   </div>
                 </div>
               )}
+
+              {/* 5. MCP SERVER FORM (e.g. mcp.coros.com) */}
+              {activeProvider === 'mcp' && (
+                <div className="space-y-3">
+                  <div className="space-y-2 p-3.5 rounded-xl border bg-purple-950/20 border-purple-500/30">
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs font-bold text-purple-400 flex items-center gap-1.5">
+                        <Bot className="w-4 h-4" />
+                        <span>Model Context Protocol (MCP) Remote Server</span>
+                      </div>
+                      <div className="flex items-center gap-1 text-[10px]">
+                        <span className="text-slate-400">Presets:</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMcpConfig((p) => ({ ...p, endpointUrl: 'https://mcp.coros.com/mcp', mode: 'direct' }));
+                          }}
+                          className="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 font-medium cursor-pointer"
+                        >
+                          COROS Wearables
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMcpConfig((p) => ({ ...p, endpointUrl: 'http://localhost:3001/sse', mode: 'direct' }));
+                          }}
+                          className="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 font-medium cursor-pointer"
+                        >
+                          Local SSE
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-slate-300">
+                      Connect to any remote MCP endpoint via HTTP JSON-RPC 2.0. Discovers all tools and resources (e.g. activities, fitness logs, database queries) and imports them directly into AlaSQL.
+                    </p>
+
+                    <div className="space-y-3 pt-1">
+                      <div>
+                        <label className={`block text-[11px] font-semibold mb-1 ${isBright ? 'text-slate-600' : 'text-slate-400'}`}>
+                          MCP Endpoint URL
+                        </label>
+                        <input
+                          type="text"
+                          value={mcpConfig.endpointUrl}
+                          onChange={(e) => setMcpConfig((p) => ({ ...p, endpointUrl: e.target.value }))}
+                          placeholder="https://mcp.coros.com/mcp"
+                          className={`w-full px-3 py-1.5 text-xs rounded-lg border font-mono ${
+                            isBright ? 'bg-white border-slate-300 text-slate-800' : 'bg-[#080d1a] border-[#1b2b4d] text-slate-200'
+                          }`}
+                        />
+                      </div>
+
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className={`block text-[11px] font-semibold ${isBright ? 'text-slate-600' : 'text-slate-400'}`}>
+                            OAuth / Bearer Token
+                          </label>
+                          <span className="text-[10px] text-slate-400">
+                            Required for authenticated endpoints like <code className="text-purple-300 font-mono">mcp.coros.com</code>
+                          </span>
+                        </div>
+                        <input
+                          type="password"
+                          value={mcpConfig.authToken || ''}
+                          onChange={(e) => setMcpConfig((p) => ({ ...p, authToken: e.target.value }))}
+                          placeholder="Bearer eyJhbGciOi..."
+                          className={`w-full px-3 py-1.5 text-xs rounded-lg border font-mono ${
+                            isBright ? 'bg-white border-slate-300 text-slate-800' : 'bg-[#080d1a] border-[#1b2b4d] text-slate-200'
+                          }`}
+                        />
+                        <div className="text-[10px] text-slate-400 mt-1 flex items-center gap-1">
+                          <span>Tip: If testing without a COROS token yet, switch mode to</span>
+                          <button
+                            type="button"
+                            onClick={() => setMcpConfig((p) => ({ ...p, mode: 'demo' }))}
+                            className="text-purple-400 hover:underline font-semibold cursor-pointer"
+                          >
+                            🧪 COROS Demo Profile
+                          </button>
+                          <span>to explore real GPS running, HRV, and marathon metrics!</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -1768,6 +1954,33 @@ export default {
                       </div>
                     </div>
                   ))}
+
+                {activeProvider === 'mcp' && (
+                  <div
+                    onClick={() => {
+                      setMcpConfig({
+                        endpointUrl: DEMO_COROS_PROFILE.endpointUrl,
+                        mode: 'demo',
+                        name: DEMO_COROS_PROFILE.title,
+                      });
+                      setSubTab('params');
+                    }}
+                    className="p-3 rounded-xl border cursor-pointer hover:border-purple-500 transition-colors bg-[#0c162e] border-[#182a4d]"
+                  >
+                    <div className="text-xs font-bold text-purple-400 mb-1 flex items-center gap-1.5">
+                      <Bot className="w-3.5 h-3.5" />
+                      <span>{DEMO_COROS_PROFILE.title}</span>
+                    </div>
+                    <div className="text-[11px] text-slate-400 mb-2">{DEMO_COROS_PROFILE.description}</div>
+                    <div className="flex flex-wrap gap-1">
+                      {DEMO_COROS_PROFILE.tables.map((t) => (
+                        <span key={t} className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#101f3b] text-slate-300">
+                          {t}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -2042,7 +2255,9 @@ export default {
                     ? 'bg-amber-600 hover:bg-amber-500 shadow-amber-900/30'
                     : activeProvider === 'snowflake'
                     ? 'bg-cyan-600 hover:bg-cyan-500 shadow-cyan-900/30'
-                    : 'bg-blue-600 hover:bg-blue-500 shadow-blue-900/30'
+                    : activeProvider === 'bigquery'
+                    ? 'bg-blue-600 hover:bg-blue-500 shadow-blue-900/30'
+                    : 'bg-purple-600 hover:bg-purple-500 shadow-purple-900/30'
                 }`}
               >
                 {isImporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ArrowRight className="w-3.5 h-3.5" />}

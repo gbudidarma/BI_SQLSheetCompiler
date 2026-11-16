@@ -12,7 +12,7 @@
 
 ## 🚀 Key Features
 
-- **Unified Enterprise Database Hub**: Connect to **PostgreSQL**, **AWS Cloud** (Athena, Redshift, S3, RDS/Aurora), **Snowflake**, and **Google BigQuery** all in 1 unified "Database" menu. Includes automated table introspection, real-time connection latency measurement, and instant in-browser demo datasets.
+- **Unified Enterprise Database Hub**: Connect to **PostgreSQL**, **AWS Cloud** (Athena, Redshift, S3, RDS/Aurora), **Snowflake**, **Google BigQuery**, and **MCP Servers** (e.g. `https://mcp.coros.com/mcp`) all in 1 unified "Database" menu. Includes automated table introspection, real-time connection latency measurement, and instant in-browser demo datasets.
 - **Zero-Bridge & Direct Cloud Execution**: Connect directly from your browser to Neon Serverless PostgreSQL, Supabase PostgREST, Amazon S3 Presigned URLs, Snowflake SQL API, and Google BigQuery REST API without requiring a local bridge server.
 - **Offline Direct SQL & CSV Paste Ingester**: Copy and paste table data or SQL DDL/INSERT statements exported from any database tool (DBeaver, pgAdmin, Snowflake Snowsight, BigQuery Studio, DataGrip) directly into in-memory AlaSQL with zero network setup.
 - **Cross-Database SQL Analytics**: Query and join tables across Snowflake, BigQuery, AWS, PostgreSQL, and local Excel/CSV spreadsheets simultaneously in memory using standard ANSI SQL.
@@ -37,6 +37,7 @@ All data sources are accessible in one unified **"Database"** menu in the SQL Sc
 | **AWS Cloud** ☁️ | **Amazon Athena** (S3 Data Lake), **Amazon Redshift** (Data Warehouse), **Amazon S3** (Buckets & Presigned URLs), **Amazon RDS / Aurora** | **⚡ Direct S3 Presigned Fetch**, **📋 SQL/CSV Paste**, Cloud Gateway, Local Bridge, Demo Profile |
 | **Snowflake** ❄️ | Snowflake Data Cloud (Warehouses, Databases, Schemas, Roles) | **⚡ Direct SQL REST API v2**, **📋 SQL/CSV Paste**, Cloud Gateway, Local Bridge, Demo Profile |
 | **Google BigQuery** 🔍 | Petabyte-scale analytics, GA4 clickstream exports, multi-region datasets | **⚡ Direct Google Cloud REST API v2**, **📋 SQL/CSV Paste**, Cloud Gateway, Local Bridge, Demo Profile |
+| **MCP Server** 🤖 | Remote & Local **Model Context Protocol** servers (e.g. **COROS Wearables** at `https://mcp.coros.com/mcp`) | **⚡ Direct MCP HTTP JSON-RPC 2.0**, Bearer Token, COROS Wearables Demo Profile |
 
 ### 💡 Cross-Warehouse SQL Example
 Query across cloud data warehouses and local spreadsheets in a single query:

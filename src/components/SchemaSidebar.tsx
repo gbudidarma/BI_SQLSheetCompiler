@@ -285,6 +285,8 @@ export const SchemaSidebar: React.FC<SchemaSidebarProps> = ({
                       <span className="text-xs shrink-0 select-none" title="Amazon S3 Object">🪣</span>
                     ) : table.sourceType === 'rds' ? (
                       <span className="text-xs shrink-0 select-none" title="Amazon RDS Aurora Table">🐬</span>
+                    ) : table.sourceType === 'mcp' ? (
+                      <span className="text-xs shrink-0 select-none" title="Model Context Protocol (MCP) Table">🤖</span>
                     ) : (
                       <TableIcon className="w-3.5 h-3.5 text-blue-500 shrink-0" />
                     )}
@@ -311,6 +313,11 @@ export const SchemaSidebar: React.FC<SchemaSidebarProps> = ({
                     {(table.sourceType === 'aws' || table.sourceType === 'athena' || table.sourceType === 'redshift' || table.sourceType === 's3' || table.sourceType === 'rds') && (
                       <span className="text-[9px] font-mono px-1 py-0.2 rounded font-bold bg-amber-500/20 text-amber-500 dark:text-amber-300 border border-amber-500/40 shrink-0">
                         AWS
+                      </span>
+                    )}
+                    {table.sourceType === 'mcp' && (
+                      <span className="text-[9px] font-mono px-1 py-0.2 rounded font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40 shrink-0">
+                        MCP
                       </span>
                     )}
                   </div>
@@ -353,6 +360,8 @@ export const SchemaSidebar: React.FC<SchemaSidebarProps> = ({
                         ? (table.connectionName || `BigQuery: ${table.name}`)
                         : (table.sourceType === 'aws' || table.sourceType === 'athena' || table.sourceType === 'redshift' || table.sourceType === 's3' || table.sourceType === 'rds')
                         ? (table.connectionName || `AWS: ${table.name}`)
+                        : table.sourceType === 'mcp'
+                        ? (table.connectionName || `MCP: ${table.name}`)
                         : (table.sheetName || table.sourceFileName)}
                     </span>
                     <div className="flex items-center gap-1">
