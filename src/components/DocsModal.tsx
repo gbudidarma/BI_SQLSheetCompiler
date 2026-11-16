@@ -451,21 +451,22 @@ ORDER BY total_revenue DESC;`,
   {
     id: 'database',
     title: 'Enterprise Database Hub (PostgreSQL, AWS, Snowflake, BigQuery)',
-    badge: 'Unified Data Hub',
+    badge: 'Zero-Bridge & Direct REST',
     badgeColor: 'bg-indigo-500/15 text-indigo-400 border-indigo-500/30',
     icon: Database,
     iconColor: 'text-indigo-400',
     summary:
-      'Connect SheetSQL to your enterprise databases and cloud data warehouses in one unified menu. Query PostgreSQL, Amazon Web Services (Athena, Redshift, S3, RDS), Snowflake Data Cloud, and Google BigQuery right inside your browser.',
-    keywords: ['database', 'postgres', 'postgresql', 'aws', 'athena', 'redshift', 's3', 'snowflake', 'bigquery', 'google', 'warehouse', 'bridge', 'connector'],
+      'Connect SheetSQL to your enterprise databases and cloud data warehouses with or without a local bridge. Query PostgreSQL, Amazon Web Services (Athena, Redshift, S3, RDS), Snowflake Data Cloud, and Google BigQuery right inside your browser.',
+    keywords: ['database', 'postgres', 'postgresql', 'aws', 'athena', 'redshift', 's3', 'snowflake', 'bigquery', 'google', 'warehouse', 'bridge', 'connector', 'neon', 'supabase', 'cloudflare worker', 'paste sql'],
     capabilities: [
-      'PostgreSQL: Introspect schemas and query tables from localhost, Docker, AWS RDS, Supabase, Neon, and Azure',
-      'AWS Cloud Suite: Query S3 data lakes via Athena, data warehouses with Redshift, direct CSV/Excel from S3 buckets, and Aurora RDS',
-      'Snowflake Data Cloud: Connect to Snowflake accounts, compute warehouses, databases, and schemas',
-      'Google BigQuery: Query petabyte-scale cloud datasets, GA4 clickstream exports, and multi-region tables',
-      'Instant In-Browser Demo Profiles: Realistic test datasets for each database provider with zero installation required',
-      'Unified Bridge Server: Run "npm run bridge" to query enterprise databases securely without browser CORS or socket limitations',
-      'Cross-Database Joins: Write ANSI SQL joining tables across Snowflake, BigQuery, AWS, PostgreSQL, and local Excel files simultaneously'
+      'Zero-Bridge Direct Cloud REST: Direct HTTP queries to Neon Serverless PostgreSQL and Supabase PostgREST without any bridge server',
+      'Direct S3 Presigned URLs: Download and parse CSV, TSV, JSON, and XLSX files from Amazon S3 directly in-browser',
+      'Snowflake & BigQuery REST APIs: Connect with OAuth or Bearer tokens directly over HTTPS',
+      'Direct SQL & CSV Paste Ingester: Paste raw SQL DDL/INSERT statements, DBeaver/pgAdmin/Snowsight query grids, or CSV/TSV data for 100% offline in-browser import',
+      'Free Cloudflare Worker Gateway: Deploy a free 25-line Cloudflare Worker in 30 seconds for 24/7 serverless cloud proxying',
+      'Local Node.js Bridge Server: Run "npm run bridge" when developing locally with private localhost/Docker databases',
+      'Instant In-Browser Demo Profiles: Test datasets for each provider ready for immediate querying with zero setup',
+      'Cross-Database Joins: Join Snowflake, BigQuery, AWS, PostgreSQL, and local Excel files in a single unified SQL query'
     ],
     steps: [
       {
@@ -473,24 +474,21 @@ ORDER BY total_revenue DESC;`,
         desc: 'Click the "Database" button in the SQL Schema sidebar.'
       },
       {
-        title: 'Choose Provider',
-        desc: 'Select PostgreSQL, AWS Cloud, Snowflake, or Google BigQuery.'
+        title: 'Choose Provider & Mode',
+        desc: 'Select PostgreSQL, AWS Cloud, Snowflake, or BigQuery. Choose Direct Cloud API (Neon/Supabase/S3), Cloud Gateway, or Offline SQL/CSV Paste.'
       },
       {
-        title: 'Demo Mode or Local Bridge',
-        desc: 'Pick an Instant Demo profile for immediate exploration, or connect via the local bridge server.'
+        title: 'Zero-Bridge Connection or Paste',
+        desc: 'Enter your endpoint credentials for direct HTTPS access, or switch to the "SQL / CSV Paste" tab to paste query results copied from your database console.'
       },
       {
-        title: 'Discover & Import Tables',
-        desc: 'Click "Test Connection" to auto-discover tables, select what you need, and import into SQL Studio.'
+        title: 'Import & Query Immediately',
+        desc: 'Import selected tables into SQL Studio and execute joins across cloud databases and local spreadsheets in memory.'
       }
     ],
     proTip:
-      'Cross-database analytics in memory! You can run a single SQL query that joins a Snowflake orders fact table with a Google BigQuery marketing dataset and an uploaded Excel spreadsheet.',
-    exampleSnippet: `# 1. Start the unified bridge server:
-npm run bridge
-
-# 2. Example cross-warehouse SQL query joining Snowflake, BigQuery, and Excel:
+      'No local bridge server required! Use the "Direct Cloud API" mode (for Neon, Supabase, Snowflake, and BigQuery) or the "SQL / CSV Paste" tab to import data from your favorite database tool (DBeaver, pgAdmin, Snowsight) with zero terminal setup.',
+    exampleSnippet: `-- Cross-warehouse join across Snowflake, BigQuery, and local Excel:
 SELECT 
   s.order_id,
   s.total_amount,

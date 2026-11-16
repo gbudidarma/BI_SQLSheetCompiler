@@ -13,6 +13,8 @@
 ## 🚀 Key Features
 
 - **Unified Enterprise Database Hub**: Connect to **PostgreSQL**, **AWS Cloud** (Athena, Redshift, S3, RDS/Aurora), **Snowflake**, and **Google BigQuery** all in 1 unified "Database" menu. Includes automated table introspection, real-time connection latency measurement, and instant in-browser demo datasets.
+- **Zero-Bridge & Direct Cloud Execution**: Connect directly from your browser to Neon Serverless PostgreSQL, Supabase PostgREST, Amazon S3 Presigned URLs, Snowflake SQL API, and Google BigQuery REST API without requiring a local bridge server.
+- **Offline Direct SQL & CSV Paste Ingester**: Copy and paste table data or SQL DDL/INSERT statements exported from any database tool (DBeaver, pgAdmin, Snowflake Snowsight, BigQuery Studio, DataGrip) directly into in-memory AlaSQL with zero network setup.
 - **Cross-Database SQL Analytics**: Query and join tables across Snowflake, BigQuery, AWS, PostgreSQL, and local Excel/CSV spreadsheets simultaneously in memory using standard ANSI SQL.
 - **SQL Studio**: Execute ANSI-style SQL queries on in-memory tables powered by AlaSQL. Features syntax highlighting, query history, quick code snippets, intelligent auto-suggest, and instant result export.
 - **Data Modeler (ERD)**: Interactive Entity-Relationship Diagram generator with automatic key detection, visual schema exploration, and drag-and-drop join builder.
@@ -29,12 +31,12 @@
 
 All data sources are accessible in one unified **"Database"** menu in the SQL Schema sidebar:
 
-| Provider | Supported Services / Engines | Execution Modes |
+| Provider | Supported Services / Engines | Execution Modes (Zero Bridge Supported) |
 | :--- | :--- | :--- |
-| **PostgreSQL** 🐘 | Localhost, Docker, Neon, Supabase, Azure, AWS RDS, GCP Cloud SQL | Instant Demo Profile, Local Bridge |
-| **AWS Cloud** ☁️ | **Amazon Athena** (S3 Data Lake), **Amazon Redshift** (Data Warehouse), **Amazon S3** (Buckets & Presigned URLs), **Amazon RDS / Aurora** | Instant Demo Profile, Direct S3 Fetch, Local Bridge |
-| **Snowflake** ❄️ | Snowflake Data Cloud (Warehouses, Databases, Schemas, Roles) | Instant Demo Profile, Local Bridge |
-| **Google BigQuery** 🔍 | Petabyte-scale analytics, GA4 clickstream exports, multi-region datasets | Instant Demo Profile, Local Bridge |
+| **PostgreSQL** 🐘 | Localhost, Docker, Neon, Supabase, Azure, AWS RDS, GCP Cloud SQL | **⚡ Direct Neon HTTP API**, **⚡ Supabase REST**, **📋 SQL/CSV Paste**, Cloud Gateway, Local Bridge, Demo Profile |
+| **AWS Cloud** ☁️ | **Amazon Athena** (S3 Data Lake), **Amazon Redshift** (Data Warehouse), **Amazon S3** (Buckets & Presigned URLs), **Amazon RDS / Aurora** | **⚡ Direct S3 Presigned Fetch**, **📋 SQL/CSV Paste**, Cloud Gateway, Local Bridge, Demo Profile |
+| **Snowflake** ❄️ | Snowflake Data Cloud (Warehouses, Databases, Schemas, Roles) | **⚡ Direct SQL REST API v2**, **📋 SQL/CSV Paste**, Cloud Gateway, Local Bridge, Demo Profile |
+| **Google BigQuery** 🔍 | Petabyte-scale analytics, GA4 clickstream exports, multi-region datasets | **⚡ Direct Google Cloud REST API v2**, **📋 SQL/CSV Paste**, Cloud Gateway, Local Bridge, Demo Profile |
 
 ### 💡 Cross-Warehouse SQL Example
 Query across cloud data warehouses and local spreadsheets in a single query:

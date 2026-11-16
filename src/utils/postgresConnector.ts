@@ -14,8 +14,13 @@ export interface PostgresConnectionConfig {
   user: string;
   password?: string;
   sslMode: 'require' | 'prefer' | 'disable' | 'verify-full';
-  bridgeUrl?: string; // Default: 'http://localhost:54321'
-  mode: 'bridge' | 'neon' | 'demo';
+  bridgeUrl?: string; // Default: 'http://localhost:54321' or custom remote gateway
+  mode: 'direct_neon' | 'direct_supabase' | 'bridge' | 'demo';
+  // Direct Neon Serverless HTTP API
+  neonEndpointUrl?: string; // e.g. "https://ep-cool-fog-123456.us-east-2.aws.neon.tech/sql"
+  // Direct Supabase REST
+  supabaseUrl?: string; // e.g. "https://xyzcompany.supabase.co"
+  supabaseKey?: string; // anon key or service role key
 }
 
 export interface DiscoveredTable {
@@ -259,11 +264,122 @@ function inferColumns(rows: Record<string, any>[]): ColumnInfo[] {
 }
 
 // ============================================================================
+// DIRECT HTTP EXECUTIONS (NEON & SUPABASE - ZERO BRIDGE REQUIRED)
+// ============================================================================
+
+export async function executeNeonQuery(
+  neonEndpointOrHost: string,
+  tokenOrPassword: string,
+  sql: string
+): Promise<Record<string, any>[]> {
+  let endpoint = neonEndpointOrHost.trim();
+  if (!endpoint.startsWith('http')) {
+    endpoint = `https://${endpoint}`;
+  }
+  if (!endpoint.endsWith('/sql')) {
+    endpoint = `${endpoint.replace(/\/+$/, '')}/sql`;
+  }
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${tokenOrPassword}`,
+    },
+    body: JSON.stringify({ query: sql }),
+  });
+
+  if (!response.ok) {
+    const errJson = await response.json().catch(() => ({}));
+    throw new Error(errJson.message || `Neon SQL HTTP Error ${response.status}: ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  if (Array.isArray(data.rows)) {
+    if (data.rows.length === 0) return [];
+    if (typeof data.rows[0] === 'object' && !Array.isArray(data.rows[0])) {
+      return data.rows;
+    }
+    if (Array.isArray(data.rows[0]) && Array.isArray(data.fields)) {
+      const fieldNames = data.fields.map((f: any) => f.name || f);
+      return data.rows.map((rowArr: any[]) => {
+        const obj: Record<string, any> = {};
+        fieldNames.forEach((name: string, idx: number) => {
+          obj[name] = rowArr[idx];
+        });
+        return obj;
+      });
+    }
+  }
+  return [];
+}
+
+export async function executeSupabaseRest(
+  supabaseUrl: string,
+  apiKey: string,
+  tableName: string,
+  limit = 5000
+): Promise<Record<string, any>[]> {
+  const cleanUrl = supabaseUrl.trim().replace(/\/+$/, '');
+  const endpoint = `${cleanUrl}/rest/v1/${tableName}?select=*&limit=${limit}`;
+
+  const response = await fetch(endpoint, {
+    method: 'GET',
+    headers: {
+      apikey: apiKey,
+      Authorization: `Bearer ${apiKey}`,
+      Accept: 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.message || `Supabase REST HTTP ${response.status}: ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  return Array.isArray(data) ? data : [];
+}
+
+export async function fetchSupabaseTables(
+  supabaseUrl: string,
+  apiKey: string
+): Promise<DiscoveredTable[]> {
+  const cleanUrl = supabaseUrl.trim().replace(/\/+$/, '');
+  const endpoint = `${cleanUrl}/rest/v1/`;
+
+  const response = await fetch(endpoint, {
+    method: 'GET',
+    headers: {
+      apikey: apiKey,
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to inspect Supabase OpenAPI schema: HTTP ${response.status}`);
+  }
+
+  const spec = await response.json();
+  const paths = Object.keys(spec.paths || {});
+  const tablePaths = paths
+    .filter((p) => p !== '/' && !p.startsWith('/rpc/'))
+    .map((p) => p.replace(/^\//, ''));
+
+  return tablePaths.map((tbl) => ({
+    name: tbl,
+    schema: 'public',
+    rowCount: 0,
+    columnCount: 0,
+  }));
+}
+
+// ============================================================================
 // CORE POSTGRESQL CONNECTOR CLIENT
 // ============================================================================
 
 /**
- * Test PostgreSQL connection (Bridge, Direct HTTP, or Demo profile)
+ * Test PostgreSQL connection (Direct Neon, Direct Supabase, Local/Remote Bridge, or Demo)
  */
 export async function testPostgresConnection(
   config: PostgresConnectionConfig
@@ -272,7 +388,7 @@ export async function testPostgresConnection(
 
   // Mode 1: Instant Demo Profiles
   if (config.mode === 'demo') {
-    await new Promise((resolve) => setTimeout(resolve, 60)); // Simulate realistic network ping
+    await new Promise((resolve) => setTimeout(resolve, 60));
     const latency = Math.round(performance.now() - startTime);
     return {
       success: true,
@@ -283,7 +399,78 @@ export async function testPostgresConnection(
     };
   }
 
-  // Mode 2: Local Bridge Agent (http://localhost:54321)
+  // Mode 2: Direct Neon Serverless SQL HTTP API (Zero Bridge)
+  if (config.mode === 'direct_neon') {
+    try {
+      const endpoint = config.neonEndpointUrl || config.host || '';
+      const password = config.password || '';
+      if (!endpoint) {
+        return {
+          success: false,
+          latencyMs: 0,
+          error: 'Please enter your Neon Endpoint URL or Host (e.g. ep-cold-dawn-1234.us-east-2.aws.neon.tech)',
+        };
+      }
+
+      const rows = await executeNeonQuery(
+        endpoint,
+        password,
+        'SELECT version(), current_database(), current_user;'
+      );
+      const latency = Math.round(performance.now() - startTime);
+
+      const first = rows[0] || {};
+      return {
+        success: true,
+        latencyMs: latency,
+        version: first.version || 'Neon Serverless PostgreSQL (Direct HTTP API)',
+        database: first.current_database || config.database || 'main',
+        user: first.current_user || 'neon_admin',
+      };
+    } catch (err: any) {
+      const latency = Math.round(performance.now() - startTime);
+      return {
+        success: false,
+        latencyMs: latency,
+        error: `Neon Direct HTTP Error: ${err.message}. Verify host and Neon password/token.`,
+      };
+    }
+  }
+
+  // Mode 3: Direct Supabase REST API (Zero Bridge)
+  if (config.mode === 'direct_supabase') {
+    try {
+      const sbUrl = config.supabaseUrl || '';
+      const sbKey = config.supabaseKey || config.password || '';
+      if (!sbUrl || !sbKey) {
+        return {
+          success: false,
+          latencyMs: 0,
+          error: 'Please provide both your Supabase Project URL and API Key (anon or service_role).',
+        };
+      }
+
+      const tables = await fetchSupabaseTables(sbUrl, sbKey);
+      const latency = Math.round(performance.now() - startTime);
+
+      return {
+        success: true,
+        latencyMs: latency,
+        version: 'Supabase PostgreSQL (PostgREST API v12)',
+        database: new URL(sbUrl).hostname.split('.')[0] || 'supabase_db',
+        user: 'supabase_anon',
+      };
+    } catch (err: any) {
+      const latency = Math.round(performance.now() - startTime);
+      return {
+        success: false,
+        latencyMs: latency,
+        error: `Supabase REST Error: ${err.message}. Ensure Project URL has CORS and API key is valid.`,
+      };
+    }
+  }
+
+  // Mode 4: Local or Remote Cloud Bridge Agent
   const bridgeUrl = (config.bridgeUrl || 'http://localhost:54321').replace(/\/+$/, '');
 
   try {
@@ -320,7 +507,7 @@ export async function testPostgresConnection(
     return {
       success: true,
       latencyMs: latency,
-      version: data.version || 'PostgreSQL (Remote)',
+      version: data.version || 'PostgreSQL (Bridge Verified)',
       database: data.database || config.database,
       user: data.user || config.user,
     };
@@ -335,11 +522,10 @@ export async function testPostgresConnection(
       };
     }
 
-    // Friendly bridge not found message
     return {
       success: false,
       latencyMs: latency,
-      error: `Could not reach PostgreSQL Bridge at ${bridgeUrl}. Browsers cannot open direct TCP sockets without a local bridge. Run 'bun run bridge' or use the Instant Demo profile to test.`,
+      error: `Could not reach bridge at ${bridgeUrl}. Use "Direct Neon HTTP", "Supabase REST", or "SQL/CSV Paste" to connect with zero local bridge.`,
     };
   }
 }
@@ -370,7 +556,30 @@ export async function fetchPostgresTables(
     });
   }
 
-  // Real Bridge
+  // Direct Neon HTTP API
+  if (config.mode === 'direct_neon') {
+    const endpoint = config.neonEndpointUrl || config.host || '';
+    const password = config.password || '';
+    const rows = await executeNeonQuery(
+      endpoint,
+      password,
+      `SELECT table_name, table_schema FROM information_schema.tables WHERE table_schema NOT IN ('pg_catalog', 'information_schema') ORDER BY table_name;`
+    );
+
+    return rows.map((r) => ({
+      name: r.table_name,
+      schema: r.table_schema || 'public',
+      rowCount: 0,
+      columnCount: 0,
+    }));
+  }
+
+  // Direct Supabase REST API
+  if (config.mode === 'direct_supabase') {
+    return fetchSupabaseTables(config.supabaseUrl || '', config.supabaseKey || config.password || '');
+  }
+
+  // Real Bridge (Local or Remote)
   const bridgeUrl = (config.bridgeUrl || 'http://localhost:54321').replace(/\/+$/, '');
 
   const response = await fetch(`${bridgeUrl}/api/tables`, {
@@ -411,8 +620,23 @@ export async function importPostgresTable(
       DEMO_POSTGRES_PROFILES[0];
     const dataset = getDemoDataset(activeProfile.id);
     rows = dataset[tableName] || [];
+  } else if (config.mode === 'direct_neon') {
+    const endpoint = config.neonEndpointUrl || config.host || '';
+    const password = config.password || '';
+    rows = await executeNeonQuery(
+      endpoint,
+      password,
+      `SELECT * FROM "${schemaName}"."${tableName}" LIMIT 10000;`
+    );
+  } else if (config.mode === 'direct_supabase') {
+    rows = await executeSupabaseRest(
+      config.supabaseUrl || '',
+      config.supabaseKey || config.password || '',
+      tableName,
+      10000
+    );
   } else {
-    // Real Bridge
+    // Real Bridge (Local or Remote)
     const bridgeUrl = (config.bridgeUrl || 'http://localhost:54321').replace(/\/+$/, '');
 
     const response = await fetch(`${bridgeUrl}/api/query`, {
@@ -440,17 +664,24 @@ export async function importPostgresTable(
 
   const columns = inferColumns(rows);
 
+  const connectionLabel =
+    config.mode === 'direct_neon'
+      ? `Neon SQL HTTP [${config.neonEndpointUrl || config.host}]`
+      : config.mode === 'direct_supabase'
+      ? `Supabase REST [${config.supabaseUrl}]`
+      : config.name || `${config.host}:${config.port}/${config.database}`;
+
   const schema: TableSchema = {
-    id: `pg_${config.database}_${tableName}`,
+    id: `pg_${config.database || 'db'}_${tableName}`,
     name: tableName,
-    sourceFileName: `${config.host || 'postgres'}/${config.database}`,
+    sourceFileName: `${config.host || 'postgres'}/${config.database || 'main'}`,
     sheetName: `${schemaName}.${tableName}`,
     rowCount: rows.length,
     columns,
     previewRows: rows.slice(0, 50),
     allRows: rows,
     sourceType: 'postgres',
-    connectionName: config.name || `${config.host}:${config.port}/${config.database}`,
+    connectionName: connectionLabel,
   };
 
   return { schema, rows };

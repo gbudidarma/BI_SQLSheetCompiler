@@ -15,8 +15,9 @@ export interface SnowflakeConnectionConfig {
   role: string; // e.g. "ACCOUNTADMIN" or "ANALYST"
   username: string;
   password?: string;
-  bridgeUrl?: string; // Default: 'http://localhost:54321'
-  mode: 'bridge' | 'demo';
+  token?: string; // OAuth / Programmatic Access Token (PAT) for direct REST API
+  bridgeUrl?: string; // Default: 'http://localhost:54321' or remote cloud gateway
+  mode: 'direct_rest' | 'bridge' | 'demo';
 }
 
 export interface SnowflakeDiscoveredTable {
@@ -170,6 +171,68 @@ export function inferSnowflakeColumns(rows: Record<string, any>[]): ColumnInfo[]
   });
 }
 
+// ============================================================================
+// DIRECT SNOWFLAKE SQL REST API (v2) - ZERO BRIDGE REQUIRED
+// ============================================================================
+
+export async function executeSnowflakeRestStatement(
+  config: SnowflakeConnectionConfig,
+  sql: string
+): Promise<Record<string, any>[]> {
+  const cleanAccount = config.account
+    .trim()
+    .replace(/^https?:\/\//, '')
+    .replace(/\.snowflakecomputing\.com\/?$/, '');
+  const endpoint = `https://${cleanAccount}.snowflakecomputing.com/api/v2/statements`;
+
+  const token = config.token || config.password;
+  if (!token) {
+    throw new Error('Snowflake REST API requires an OAuth Access Token, PAT, or JWT Bearer token.');
+  }
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      statement: sql,
+      warehouse: config.warehouse,
+      database: config.database,
+      schema: config.schema,
+      role: config.role || undefined,
+      timeout: 45,
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.message || `Snowflake REST API HTTP ${response.status}: ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  const colNames = data.resultSetMetaData?.rowType?.map((c: any) => c.name) || [];
+  const rawRows: any[][] = data.data || [];
+
+  return rawRows.map((r) => {
+    const obj: Record<string, any> = {};
+    colNames.forEach((col: string, idx: number) => {
+      let val: any = r[idx];
+      if (val !== null && val !== undefined && !isNaN(val as any) && val !== '') {
+        val = Number(val);
+      }
+      obj[col] = val;
+    });
+    return obj;
+  });
+}
+
+// ============================================================================
+// CORE SNOWFLAKE CLIENT
+// ============================================================================
+
 export async function testSnowflakeConnection(
   config: SnowflakeConnectionConfig
 ): Promise<SnowflakeTestResult> {
@@ -189,6 +252,35 @@ export async function testSnowflakeConnection(
     };
   }
 
+  // Direct Snowflake SQL REST API v2
+  if (config.mode === 'direct_rest') {
+    try {
+      const rows = await executeSnowflakeRestStatement(
+        config,
+        'SELECT CURRENT_VERSION(), CURRENT_ACCOUNT(), CURRENT_WAREHOUSE(), CURRENT_DATABASE();'
+      );
+      const latency = Math.round(performance.now() - startTime);
+      const first = rows[0] || {};
+
+      return {
+        success: true,
+        latencyMs: latency,
+        version: `Snowflake ${first.CURRENT_VERSION || '8.x'} (Direct REST API v2)`,
+        account: first.CURRENT_ACCOUNT || config.account,
+        warehouse: first.CURRENT_WAREHOUSE || config.warehouse,
+        database: first.CURRENT_DATABASE || config.database,
+      };
+    } catch (err: any) {
+      const latency = Math.round(performance.now() - startTime);
+      return {
+        success: false,
+        latencyMs: latency,
+        error: `Snowflake REST API Error: ${err.message}. If Snowflake blocks browser CORS, use Cloud Gateway URL or the offline SQL/CSV paste ingester.`,
+      };
+    }
+  }
+
+  // Bridge Mode (Local or Remote Gateway)
   const bridgeUrl = (config.bridgeUrl || 'http://localhost:54321').replace(/\/+$/, '');
 
   try {
@@ -227,7 +319,7 @@ export async function testSnowflakeConnection(
     return {
       success: false,
       latencyMs: latency,
-      error: `Could not reach database bridge at ${bridgeUrl}. Run 'npm run bridge' or use the Instant Demo profile to test.`,
+      error: `Could not reach database bridge at ${bridgeUrl}. Use "Direct REST API" or "SQL/CSV Paste" to connect without a local bridge.`,
     };
   }
 }
@@ -255,6 +347,22 @@ export async function fetchSnowflakeTables(
     });
   }
 
+  // Direct REST
+  if (config.mode === 'direct_rest') {
+    const rows = await executeSnowflakeRestStatement(
+      config,
+      `SELECT TABLE_NAME, TABLE_SCHEMA, ROW_COUNT FROM "${config.database}".INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '${config.schema}' ORDER BY TABLE_NAME;`
+    );
+
+    return rows.map((r) => ({
+      name: r.TABLE_NAME || r.table_name,
+      schema: r.TABLE_SCHEMA || r.table_schema || config.schema,
+      rowCount: r.ROW_COUNT || r.row_count || 0,
+      columnCount: 0,
+    }));
+  }
+
+  // Bridge Mode
   const bridgeUrl = (config.bridgeUrl || 'http://localhost:54321').replace(/\/+$/, '');
   const response = await fetch(`${bridgeUrl}/api/snowflake/tables`, {
     method: 'POST',
@@ -284,6 +392,11 @@ export async function importSnowflakeTable(
       DEMO_SNOWFLAKE_PROFILES[0];
     const dataset = getSnowflakeDemoDataset(activeProfile.id);
     rows = dataset[tableName] || [];
+  } else if (config.mode === 'direct_rest') {
+    rows = await executeSnowflakeRestStatement(
+      config,
+      `SELECT * FROM "${config.database}"."${schemaName}"."${tableName}" LIMIT 10000;`
+    );
   } else {
     const bridgeUrl = (config.bridgeUrl || 'http://localhost:54321').replace(/\/+$/, '');
     const response = await fetch(`${bridgeUrl}/api/snowflake/query`, {
@@ -306,6 +419,11 @@ export async function importSnowflakeTable(
 
   const columns = inferSnowflakeColumns(rows);
 
+  const connectionLabel =
+    config.mode === 'direct_rest'
+      ? `Snowflake REST API [${config.account}:${config.warehouse}/${config.database}]`
+      : config.name || `Snowflake [${config.account}:${config.warehouse}/${config.database}]`;
+
   const schema: TableSchema = {
     id: `snowflake_${config.database}_${tableName}`,
     name: tableName,
@@ -316,7 +434,7 @@ export async function importSnowflakeTable(
     previewRows: rows.slice(0, 50),
     allRows: rows,
     sourceType: 'snowflake',
-    connectionName: config.name || `Snowflake [${config.account}:${config.warehouse}/${config.database}]`,
+    connectionName: connectionLabel,
   };
 
   return { schema, rows };

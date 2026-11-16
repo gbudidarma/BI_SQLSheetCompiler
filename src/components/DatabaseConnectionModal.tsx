@@ -26,7 +26,12 @@ import {
   ArrowRight,
   Eye,
   EyeOff,
-  Search
+  Search,
+  ClipboardPaste,
+  Globe,
+  Zap,
+  Code2,
+  FileSpreadsheet
 } from 'lucide-react';
 import { TableSchema } from '../types';
 import { useTheme } from '../context/ThemeContext';
@@ -83,6 +88,12 @@ import {
   importBigQueryTable
 } from '../utils/bigqueryConnector';
 
+// Direct Offline SQL / CSV Paste Ingester (Zero-Bridge Alternative)
+import {
+  detectPasteFormat,
+  ingestPastedData
+} from '../utils/sqlPasteIngester';
+
 export type DatabaseProvider = 'postgres' | 'aws' | 'snowflake' | 'bigquery';
 
 interface DatabaseConnectionModalProps {
@@ -105,21 +116,24 @@ export const DatabaseConnectionModal: React.FC<DatabaseConnectionModalProps> = (
   // Active top-level database provider
   const [activeProvider, setActiveProvider] = useState<DatabaseProvider>(initialProvider);
 
-  // Sub-tabs: 'params' | 'samples' | 'bridge' | 's3_url'
-  const [subTab, setSubTab] = useState<'params' | 'samples' | 'bridge' | 's3_url'>('params');
+  // Sub-tabs: 'params' | 'paste' | 'samples' | 'bridge' | 's3_url'
+  const [subTab, setSubTab] = useState<'params' | 'paste' | 'samples' | 'bridge' | 's3_url'>('params');
 
   // ==========================================
   // 1. PostgreSQL State
   // ==========================================
   const [pgConfig, setPgConfig] = useState<PostgresConnectionConfig>({
-    host: 'localhost',
+    host: 'ep-pagila-demo.us-east-2.aws.neon.tech',
     port: 5432,
-    database: 'postgres',
-    user: 'postgres',
+    database: 'pagila_db',
+    user: 'neon_admin',
     password: '',
-    sslMode: 'prefer',
+    sslMode: 'require',
     bridgeUrl: 'http://localhost:54321',
-    mode: 'demo',
+    mode: 'direct_neon',
+    neonEndpointUrl: 'https://ep-pagila-demo.us-east-2.aws.neon.tech/sql',
+    supabaseUrl: 'https://your-project.supabase.co',
+    supabaseKey: '',
   });
   const [rawPgUri, setRawPgUri] = useState('');
 
@@ -127,8 +141,8 @@ export const DatabaseConnectionModal: React.FC<DatabaseConnectionModalProps> = (
   // 2. AWS State
   // ==========================================
   const [awsConfig, setAwsConfig] = useState<AwsConnectionConfig>({
-    service: 'athena',
-    mode: 'demo',
+    service: 's3',
+    mode: 'direct',
     region: 'us-east-1',
     bridgeUrl: 'http://localhost:54321',
     athenaCatalog: 'AwsDataCatalog',
@@ -142,6 +156,7 @@ export const DatabaseConnectionModal: React.FC<DatabaseConnectionModalProps> = (
     s3Bucket: 'corp-analytics-datalake-prod',
     s3Prefix: 'financial-metrics/',
     s3FileFormat: 'csv',
+    s3PresignedUrl: '',
     rdsEngine: 'postgres',
     rdsHost: 'aurora-cluster.us-east-2.rds.amazonaws.com',
     rdsPort: 5432,
@@ -161,8 +176,9 @@ export const DatabaseConnectionModal: React.FC<DatabaseConnectionModalProps> = (
     role: 'ACCOUNTADMIN',
     username: 'snow_analyst',
     password: '',
+    token: '',
     bridgeUrl: 'http://localhost:54321',
-    mode: 'demo',
+    mode: 'direct_rest',
   });
 
   // ==========================================
@@ -172,9 +188,21 @@ export const DatabaseConnectionModal: React.FC<DatabaseConnectionModalProps> = (
     projectId: 'bigquery-public-data',
     datasetId: 'ga4_obfuscated_sample_ecommerce',
     location: 'US',
+    oauthToken: '',
     bridgeUrl: 'http://localhost:54321',
-    mode: 'demo',
+    mode: 'direct_rest',
   });
+
+  // ==========================================
+  // 5. Offline Direct SQL / CSV Paste State
+  // ==========================================
+  const [pasteText, setPasteText] = useState('');
+  const [pasteTableName, setPasteTableName] = useState('');
+  const [pasteError, setPasteError] = useState('');
+  const [detectedInfo, setDetectedInfo] = useState<{
+    format: 'sql' | 'tsv' | 'csv' | 'json';
+    lineCount: number;
+  } | null>(null);
 
   // UI shared states
   const [showPassword, setShowPassword] = useState(false);
@@ -201,6 +229,24 @@ export const DatabaseConnectionModal: React.FC<DatabaseConnectionModalProps> = (
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState('');
   const [copiedCmd, setCopiedCmd] = useState(false);
+  const [copiedWorker, setCopiedWorker] = useState(false);
+
+  // Detect format when paste text updates
+  useEffect(() => {
+    if (!pasteText.trim()) {
+      setDetectedInfo(null);
+      setPasteError('');
+      return;
+    }
+    try {
+      const fmt = detectPasteFormat(pasteText);
+      const lines = pasteText.trim().split(/\r?\n/).length;
+      setDetectedInfo({ format: fmt, lineCount: lines });
+      setPasteError('');
+    } catch (e: any) {
+      setPasteError(e.message);
+    }
+  }, [pasteText]);
 
   // Reset or initialize on open or provider change
   useEffect(() => {
@@ -222,7 +268,6 @@ export const DatabaseConnectionModal: React.FC<DatabaseConnectionModalProps> = (
       setPgConfig((prev) => ({
         ...prev,
         ...parsed,
-        mode: 'bridge',
       }));
     }
   };
@@ -409,7 +454,7 @@ export const DatabaseConnectionModal: React.FC<DatabaseConnectionModalProps> = (
     setSelectedItems(next);
   };
 
-  // Import Selected Tables
+  // Import Selected Tables from Database Provider
   const handleImport = async () => {
     const toImport = Object.keys(selectedItems).filter((k) => selectedItems[k]);
     if (toImport.length === 0) return;
@@ -452,7 +497,112 @@ export const DatabaseConnectionModal: React.FC<DatabaseConnectionModalProps> = (
     }
   };
 
+  // Import Pasted Data (Zero-Bridge)
+  const handleImportPasted = () => {
+    try {
+      setPasteError('');
+      const result = ingestPastedData(pasteText, pasteTableName);
+      onTablesLoaded([{ schema: result.schema, rows: result.rows }]);
+      onClose();
+    } catch (err: any) {
+      setPasteError(err.message || 'Failed to parse pasted data.');
+    }
+  };
+
+  // Load sample content into the Paste tab
+  const loadSamplePaste = (type: 'sql' | 'tsv' | 'csv') => {
+    if (type === 'sql') {
+      setPasteTableName('enterprise_sales_dump');
+      setPasteText(
+`CREATE TABLE enterprise_sales (
+  order_id INT,
+  region VARCHAR(50),
+  product_name VARCHAR(100),
+  quantity INT,
+  unit_price NUMERIC(10,2),
+  order_date DATE
+);
+
+INSERT INTO enterprise_sales VALUES
+(101, 'North America', 'Cloud Server 2U', 2, 650.00, '2024-04-01'),
+(102, 'Europe', 'Managed Kubernetes Cluster', 1, 1450.00, '2024-04-02'),
+(103, 'Asia Pacific', 'AI GPU Accelerator', 4, 1600.00, '2024-04-05'),
+(104, 'North America', 'DDoS Protection Gateway', 3, 250.00, '2024-04-08'),
+(105, 'Latin America', 'Dedicated Fiber Uplink', 1, 890.00, '2024-04-10');`
+      );
+    } else if (type === 'tsv') {
+      setPasteTableName('dbeaver_query_export');
+      setPasteText(
+`customer_id\tcompany_name\tcountry\tplan_tier\tmrr_usd\tchurn_risk_pct
+CUST-101\tAcme Cloud Inc\tUSA\tEnterprise\t14500.00\t2.5
+CUST-102\tNordic Analytics\tSweden\tEnterprise\t22400.00\t1.8
+CUST-103\tTokyo Data Works\tJapan\tPro\t4800.00\t8.2
+CUST-104\tBerlin FinTech\tGermany\tPro\t6200.00\t14.0
+CUST-105\tSydney Logistics\tAustralia\tEnterprise\t18900.00\t3.1`
+      );
+    } else {
+      setPasteTableName('csv_metrics_export');
+      setPasteText(
+`fiscal_quarter,department,budget_allocated,actual_spend,variance_pct
+Q1-2024,Engineering,450000.00,428000.00,-4.88
+Q1-2024,Marketing,280000.00,295000.00,5.36
+Q1-2024,Sales,320000.00,312000.00,-2.50
+Q1-2024,Product,190000.00,185000.00,-2.63
+Q1-2024,Operations,140000.00,138500.00,-1.07`
+      );
+    }
+  };
+
   const selectedCount = Object.values(selectedItems).filter(Boolean).length;
+
+  const cloudflareWorkerCode = `/**
+ * Cloudflare Worker Database Gateway for SheetSQL (Zero Local Bridge)
+ * Deploy for free on Cloudflare Workers (https://workers.cloudflare.com)
+ */
+export default {
+  async fetch(request, env) {
+    if (request.method === "OPTIONS") {
+      return new Response(null, {
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type, Authorization, apikey, x-snowflake-authorization-token-type",
+        },
+      });
+    }
+
+    const url = new URL(request.url);
+
+    // Health check
+    if (url.pathname === "/health" || url.pathname === "/") {
+      return new Response(JSON.stringify({ status: "ok", service: "SheetSQL Cloud Gateway" }), {
+        headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+      });
+    }
+
+    // Proxy target from header
+    const targetUrl = request.headers.get("X-Target-Url");
+    if (!targetUrl) {
+      return new Response(JSON.stringify({ error: "Missing X-Target-Url header" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+      });
+    }
+
+    const modifiedHeaders = new Headers(request.headers);
+    modifiedHeaders.delete("host");
+
+    const resp = await fetch(targetUrl, {
+      method: request.method,
+      headers: modifiedHeaders,
+      body: request.method !== "GET" && request.method !== "HEAD" ? await request.text() : undefined,
+    });
+
+    const newRespHeaders = new Headers(resp.headers);
+    newRespHeaders.set("Access-Control-Allow-Origin", "*");
+    return new Response(resp.body, { status: resp.status, headers: newRespHeaders });
+  },
+};`;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
@@ -477,11 +627,11 @@ export const DatabaseConnectionModal: React.FC<DatabaseConnectionModalProps> = (
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-bold tracking-tight">Enterprise Database Connections</h3>
                 <span className="text-[10px] font-mono px-1.5 py-0.5 rounded font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40">
-                  Unified Hub
+                  Zero Bridge & Direct
                 </span>
               </div>
               <p className={`text-[11px] ${isBright ? 'text-slate-600' : 'text-slate-400'}`}>
-                Connect to PostgreSQL, AWS Cloud, Snowflake, and Google BigQuery in one unified studio
+                Connect to PostgreSQL, AWS Cloud, Snowflake, and BigQuery directly in your browser without requiring a local bridge server
               </p>
             </div>
           </div>
@@ -579,69 +729,81 @@ export const DatabaseConnectionModal: React.FC<DatabaseConnectionModalProps> = (
           </button>
         </div>
 
-        {/* SUB-TABS (Parameters, Demo Profiles, Bridge Guide, URL/Direct) */}
+        {/* SUB-TABS (Parameters / Direct API, Paste Dump, Demo Datasets, Cloudflare/Node Bridge) */}
         <div
-          className={`flex items-center border-b px-4 text-xs font-medium ${
+          className={`flex items-center border-b px-4 text-xs font-medium overflow-x-auto ${
             isBright ? 'border-slate-200 bg-slate-50' : 'border-[#162544] bg-[#091224]'
           }`}
         >
           <button
             onClick={() => setSubTab('params')}
-            className={`py-2 px-3 border-b-2 transition cursor-pointer flex items-center gap-1.5 ${
+            className={`py-2 px-3 border-b-2 transition cursor-pointer flex items-center gap-1.5 shrink-0 ${
               subTab === 'params'
                 ? 'border-indigo-500 text-indigo-400 font-bold'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            <Server className="w-3.5 h-3.5" />
-            <span>Connection Parameters</span>
+            <Zap className="w-3.5 h-3.5 text-amber-400" />
+            <span>Direct Cloud API & Parameters</span>
           </button>
 
-          {activeProvider === 'aws' && awsConfig.service === 's3' && (
+          <button
+            onClick={() => setSubTab('paste')}
+            className={`py-2 px-3 border-b-2 transition cursor-pointer flex items-center gap-1.5 shrink-0 ${
+              subTab === 'paste'
+                ? 'border-indigo-500 text-indigo-400 font-bold'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <ClipboardPaste className="w-3.5 h-3.5 text-emerald-400" />
+            <span>📋 SQL / CSV Paste (Zero Bridge)</span>
+          </button>
+
+          {activeProvider === 'aws' && (
             <button
               onClick={() => setSubTab('s3_url')}
-              className={`py-2 px-3 border-b-2 transition cursor-pointer flex items-center gap-1.5 ${
+              className={`py-2 px-3 border-b-2 transition cursor-pointer flex items-center gap-1.5 shrink-0 ${
                 subTab === 's3_url'
                   ? 'border-indigo-500 text-indigo-400 font-bold'
                   : 'border-transparent text-slate-400 hover:text-slate-200'
               }`}
             >
-              <Link2 className="w-3.5 h-3.5" />
+              <Link2 className="w-3.5 h-3.5 text-blue-400" />
               <span>Direct S3 URL</span>
             </button>
           )}
 
           <button
             onClick={() => setSubTab('samples')}
-            className={`py-2 px-3 border-b-2 transition cursor-pointer flex items-center gap-1.5 ${
+            className={`py-2 px-3 border-b-2 transition cursor-pointer flex items-center gap-1.5 shrink-0 ${
               subTab === 'samples'
                 ? 'border-indigo-500 text-indigo-400 font-bold'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
             <span>Instant Demo Datasets</span>
           </button>
 
           <button
             onClick={() => setSubTab('bridge')}
-            className={`py-2 px-3 border-b-2 transition cursor-pointer flex items-center gap-1.5 ${
+            className={`py-2 px-3 border-b-2 transition cursor-pointer flex items-center gap-1.5 shrink-0 ${
               subTab === 'bridge'
                 ? 'border-indigo-500 text-indigo-400 font-bold'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            <Terminal className="w-3.5 h-3.5" />
-            <span>Node.js Bridge Guide</span>
+            <Globe className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Cloud Gateway & Bridge</span>
           </button>
         </div>
 
         {/* MODAL BODY */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
-          {/* TAB: PARAMETERS */}
+          {/* TAB 1: PARAMETERS & DIRECT CLOUD API */}
           {subTab === 'params' && (
             <div className="space-y-4 animate-in fade-in duration-150">
-              {/* Mode Banner / Pill */}
+              {/* Mode Selection Pills */}
               <div
                 className={`p-3 rounded-lg border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
                   isBright ? 'bg-indigo-50/60 border-indigo-200/80' : 'bg-[#101b33] border-[#1d3159]'
@@ -649,142 +811,397 @@ export const DatabaseConnectionModal: React.FC<DatabaseConnectionModalProps> = (
               >
                 <div>
                   <div className="text-xs font-bold text-indigo-400 flex items-center gap-1.5">
-                    <span>Selected Provider:</span>
-                    <span className="uppercase font-mono">{activeProvider}</span>
+                    <Zap className="w-3.5 h-3.5" />
+                    <span>Connection Mode:</span>
+                    <span className="uppercase font-mono">
+                      {activeProvider === 'postgres'
+                        ? pgConfig.mode.replace('_', ' ')
+                        : activeProvider === 'aws'
+                        ? awsConfig.mode
+                        : activeProvider === 'snowflake'
+                        ? snowConfig.mode.replace('_', ' ')
+                        : bqConfig.mode.replace('_', ' ')}
+                    </span>
                   </div>
                   <div className={`text-[11px] ${isBright ? 'text-slate-600' : 'text-slate-400'}`}>
-                    Test instantly with in-browser demo data or connect via local bridge server.
+                    Choose Direct Cloud REST API for zero-install browser connections, or use a bridge gateway.
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1 bg-black/20 p-1 rounded-lg shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (activeProvider === 'postgres') setPgConfig((p) => ({ ...p, mode: 'demo' }));
-                      if (activeProvider === 'aws') setAwsConfig((p) => ({ ...p, mode: 'demo' }));
-                      if (activeProvider === 'snowflake') setSnowConfig((p) => ({ ...p, mode: 'demo' }));
-                      if (activeProvider === 'bigquery') setBqConfig((p) => ({ ...p, mode: 'demo' }));
-                    }}
-                    className={`px-2.5 py-1 text-xs rounded-md transition cursor-pointer font-medium ${
-                      (activeProvider === 'postgres' && pgConfig.mode === 'demo') ||
-                      (activeProvider === 'aws' && awsConfig.mode === 'demo') ||
-                      (activeProvider === 'snowflake' && snowConfig.mode === 'demo') ||
-                      (activeProvider === 'bigquery' && bqConfig.mode === 'demo')
-                        ? 'bg-indigo-600 text-white font-bold shadow-xs'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    Demo (In-Browser)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (activeProvider === 'postgres') setPgConfig((p) => ({ ...p, mode: 'bridge' }));
-                      if (activeProvider === 'aws') setAwsConfig((p) => ({ ...p, mode: 'bridge' }));
-                      if (activeProvider === 'snowflake') setSnowConfig((p) => ({ ...p, mode: 'bridge' }));
-                      if (activeProvider === 'bigquery') setBqConfig((p) => ({ ...p, mode: 'bridge' }));
-                    }}
-                    className={`px-2.5 py-1 text-xs rounded-md transition cursor-pointer font-medium ${
-                      (activeProvider === 'postgres' && pgConfig.mode === 'bridge') ||
-                      (activeProvider === 'aws' && awsConfig.mode === 'bridge') ||
-                      (activeProvider === 'snowflake' && snowConfig.mode === 'bridge') ||
-                      (activeProvider === 'bigquery' && bqConfig.mode === 'bridge')
-                        ? 'bg-indigo-600 text-white font-bold shadow-xs'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    Local Bridge
-                  </button>
+                <div className="flex items-center gap-1 bg-black/25 p-1 rounded-lg shrink-0 overflow-x-auto">
+                  {/* Postgres Modes */}
+                  {activeProvider === 'postgres' && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setPgConfig((p) => ({ ...p, mode: 'direct_neon' }))}
+                        className={`px-2 py-1 text-xs rounded-md transition cursor-pointer font-medium ${
+                          pgConfig.mode === 'direct_neon'
+                            ? 'bg-emerald-600 text-white font-bold shadow-xs'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        ⚡ Neon HTTP
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPgConfig((p) => ({ ...p, mode: 'direct_supabase' }))}
+                        className={`px-2 py-1 text-xs rounded-md transition cursor-pointer font-medium ${
+                          pgConfig.mode === 'direct_supabase'
+                            ? 'bg-emerald-600 text-white font-bold shadow-xs'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        ⚡ Supabase REST
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPgConfig((p) => ({ ...p, mode: 'bridge' }))}
+                        className={`px-2 py-1 text-xs rounded-md transition cursor-pointer font-medium ${
+                          pgConfig.mode === 'bridge'
+                            ? 'bg-indigo-600 text-white font-bold shadow-xs'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        🌐 Gateway / Bridge
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPgConfig((p) => ({ ...p, mode: 'demo' }))}
+                        className={`px-2 py-1 text-xs rounded-md transition cursor-pointer font-medium ${
+                          pgConfig.mode === 'demo'
+                            ? 'bg-indigo-600 text-white font-bold shadow-xs'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        🧪 Demo
+                      </button>
+                    </>
+                  )}
+
+                  {/* AWS Modes */}
+                  {activeProvider === 'aws' && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setAwsConfig((p) => ({ ...p, mode: 'direct' }))}
+                        className={`px-2 py-1 text-xs rounded-md transition cursor-pointer font-medium ${
+                          awsConfig.mode === 'direct'
+                            ? 'bg-emerald-600 text-white font-bold shadow-xs'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        ⚡ S3 Direct URL
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAwsConfig((p) => ({ ...p, mode: 'bridge' }))}
+                        className={`px-2 py-1 text-xs rounded-md transition cursor-pointer font-medium ${
+                          awsConfig.mode === 'bridge'
+                            ? 'bg-amber-600 text-white font-bold shadow-xs'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        🌐 Gateway / Bridge
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAwsConfig((p) => ({ ...p, mode: 'demo' }))}
+                        className={`px-2 py-1 text-xs rounded-md transition cursor-pointer font-medium ${
+                          awsConfig.mode === 'demo'
+                            ? 'bg-indigo-600 text-white font-bold shadow-xs'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        🧪 Demo
+                      </button>
+                    </>
+                  )}
+
+                  {/* Snowflake Modes */}
+                  {activeProvider === 'snowflake' && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setSnowConfig((p) => ({ ...p, mode: 'direct_rest' }))}
+                        className={`px-2 py-1 text-xs rounded-md transition cursor-pointer font-medium ${
+                          snowConfig.mode === 'direct_rest'
+                            ? 'bg-emerald-600 text-white font-bold shadow-xs'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        ⚡ Direct REST API
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSnowConfig((p) => ({ ...p, mode: 'bridge' }))}
+                        className={`px-2 py-1 text-xs rounded-md transition cursor-pointer font-medium ${
+                          snowConfig.mode === 'bridge'
+                            ? 'bg-cyan-600 text-white font-bold shadow-xs'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        🌐 Gateway / Bridge
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSnowConfig((p) => ({ ...p, mode: 'demo' }))}
+                        className={`px-2 py-1 text-xs rounded-md transition cursor-pointer font-medium ${
+                          snowConfig.mode === 'demo'
+                            ? 'bg-indigo-600 text-white font-bold shadow-xs'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        🧪 Demo
+                      </button>
+                    </>
+                  )}
+
+                  {/* BigQuery Modes */}
+                  {activeProvider === 'bigquery' && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setBqConfig((p) => ({ ...p, mode: 'direct_rest' }))}
+                        className={`px-2 py-1 text-xs rounded-md transition cursor-pointer font-medium ${
+                          bqConfig.mode === 'direct_rest'
+                            ? 'bg-emerald-600 text-white font-bold shadow-xs'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        ⚡ Direct REST API
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBqConfig((p) => ({ ...p, mode: 'bridge' }))}
+                        className={`px-2 py-1 text-xs rounded-md transition cursor-pointer font-medium ${
+                          bqConfig.mode === 'bridge'
+                            ? 'bg-blue-600 text-white font-bold shadow-xs'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        🌐 Gateway / Bridge
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBqConfig((p) => ({ ...p, mode: 'demo' }))}
+                        className={`px-2 py-1 text-xs rounded-md transition cursor-pointer font-medium ${
+                          bqConfig.mode === 'demo'
+                            ? 'bg-indigo-600 text-white font-bold shadow-xs'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        🧪 Demo
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
 
               {/* 1. POSTGRESQL FORM */}
               {activeProvider === 'postgres' && (
                 <div className="space-y-3">
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="col-span-2">
-                      <label className={`block text-[11px] font-semibold mb-1 ${isBright ? 'text-slate-600' : 'text-slate-400'}`}>
-                        Host / Endpoint
-                      </label>
-                      <input
-                        type="text"
-                        value={pgConfig.host}
-                        onChange={(e) => setPgConfig((p) => ({ ...p, host: e.target.value }))}
-                        placeholder="localhost"
-                        className={`w-full px-3 py-1.5 text-xs rounded-lg border font-mono ${
-                          isBright ? 'bg-white border-slate-300 text-slate-800' : 'bg-[#080d1a] border-[#1b2b4d] text-slate-200'
-                        }`}
-                      />
-                    </div>
-                    <div>
-                      <label className={`block text-[11px] font-semibold mb-1 ${isBright ? 'text-slate-600' : 'text-slate-400'}`}>
-                        Port
-                      </label>
-                      <input
-                        type="number"
-                        value={pgConfig.port}
-                        onChange={(e) => setPgConfig((p) => ({ ...p, port: parseInt(e.target.value, 10) || 5432 }))}
-                        placeholder="5432"
-                        className={`w-full px-3 py-1.5 text-xs rounded-lg border font-mono ${
-                          isBright ? 'bg-white border-slate-300 text-slate-800' : 'bg-[#080d1a] border-[#1b2b4d] text-slate-200'
-                        }`}
-                      />
-                    </div>
-                  </div>
+                  {/* Mode: Direct Neon HTTP */}
+                  {pgConfig.mode === 'direct_neon' && (
+                    <div className="space-y-3 p-3.5 rounded-xl border bg-emerald-950/20 border-emerald-500/30">
+                      <div className="flex items-center gap-2 text-xs font-bold text-emerald-400">
+                        <Zap className="w-4 h-4" />
+                        <span>Neon Serverless SQL HTTP API (Zero Local Bridge)</span>
+                      </div>
+                      <p className="text-[11px] text-slate-300">
+                        Neon natively supports in-browser HTTP queries via official HTTPS endpoints with CORS enabled.
+                      </p>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div>
-                      <label className={`block text-[11px] font-semibold mb-1 ${isBright ? 'text-slate-600' : 'text-slate-400'}`}>
-                        Database
-                      </label>
-                      <input
-                        type="text"
-                        value={pgConfig.database}
-                        onChange={(e) => setPgConfig((p) => ({ ...p, database: e.target.value }))}
-                        placeholder="postgres"
-                        className={`w-full px-3 py-1.5 text-xs rounded-lg border font-mono ${
-                          isBright ? 'bg-white border-slate-300 text-slate-800' : 'bg-[#080d1a] border-[#1b2b4d] text-slate-200'
-                        }`}
-                      />
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className={`block text-[11px] font-semibold mb-1 ${isBright ? 'text-slate-600' : 'text-slate-400'}`}>
+                            Neon Host or SQL Endpoint
+                          </label>
+                          <input
+                            type="text"
+                            value={pgConfig.neonEndpointUrl || pgConfig.host}
+                            onChange={(e) => setPgConfig((p) => ({ ...p, neonEndpointUrl: e.target.value, host: e.target.value }))}
+                            placeholder="ep-cool-fog-123456.us-east-2.aws.neon.tech"
+                            className={`w-full px-3 py-1.5 text-xs rounded-lg border font-mono ${
+                              isBright ? 'bg-white border-slate-300 text-slate-800' : 'bg-[#080d1a] border-[#1b2b4d] text-slate-200'
+                            }`}
+                          />
+                        </div>
+                        <div>
+                          <label className={`block text-[11px] font-semibold mb-1 ${isBright ? 'text-slate-600' : 'text-slate-400'}`}>
+                            Neon Password or Bearer Token
+                          </label>
+                          <input
+                            type="password"
+                            value={pgConfig.password || ''}
+                            onChange={(e) => setPgConfig((p) => ({ ...p, password: e.target.value }))}
+                            placeholder="npg_••••••••••••"
+                            className={`w-full px-3 py-1.5 text-xs rounded-lg border font-mono ${
+                              isBright ? 'bg-white border-slate-300 text-slate-800' : 'bg-[#080d1a] border-[#1b2b4d] text-slate-200'
+                            }`}
+                          />
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <label className={`block text-[11px] font-semibold mb-1 ${isBright ? 'text-slate-600' : 'text-slate-400'}`}>
-                        Username
-                      </label>
-                      <input
-                        type="text"
-                        value={pgConfig.user}
-                        onChange={(e) => setPgConfig((p) => ({ ...p, user: e.target.value }))}
-                        placeholder="postgres"
-                        className={`w-full px-3 py-1.5 text-xs rounded-lg border font-mono ${
-                          isBright ? 'bg-white border-slate-300 text-slate-800' : 'bg-[#080d1a] border-[#1b2b4d] text-slate-200'
-                        }`}
-                      />
+                  )}
+
+                  {/* Mode: Direct Supabase REST */}
+                  {pgConfig.mode === 'direct_supabase' && (
+                    <div className="space-y-3 p-3.5 rounded-xl border bg-emerald-950/20 border-emerald-500/30">
+                      <div className="flex items-center gap-2 text-xs font-bold text-emerald-400">
+                        <Zap className="w-4 h-4" />
+                        <span>Supabase PostgREST API (Zero Local Bridge)</span>
+                      </div>
+                      <p className="text-[11px] text-slate-300">
+                        Fetches PostgreSQL tables directly from Supabase via HTTPS REST APIs with CORS enabled.
+                      </p>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className={`block text-[11px] font-semibold mb-1 ${isBright ? 'text-slate-600' : 'text-slate-400'}`}>
+                            Supabase Project URL
+                          </label>
+                          <input
+                            type="text"
+                            value={pgConfig.supabaseUrl || ''}
+                            onChange={(e) => setPgConfig((p) => ({ ...p, supabaseUrl: e.target.value }))}
+                            placeholder="https://xyzproject.supabase.co"
+                            className={`w-full px-3 py-1.5 text-xs rounded-lg border font-mono ${
+                              isBright ? 'bg-white border-slate-300 text-slate-800' : 'bg-[#080d1a] border-[#1b2b4d] text-slate-200'
+                            }`}
+                          />
+                        </div>
+                        <div>
+                          <label className={`block text-[11px] font-semibold mb-1 ${isBright ? 'text-slate-600' : 'text-slate-400'}`}>
+                            Supabase API Key (anon or service_role)
+                          </label>
+                          <input
+                            type="password"
+                            value={pgConfig.supabaseKey || ''}
+                            onChange={(e) => setPgConfig((p) => ({ ...p, supabaseKey: e.target.value }))}
+                            placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                            className={`w-full px-3 py-1.5 text-xs rounded-lg border font-mono ${
+                              isBright ? 'bg-white border-slate-300 text-slate-800' : 'bg-[#080d1a] border-[#1b2b4d] text-slate-200'
+                            }`}
+                          />
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <label className={`block text-[11px] font-semibold mb-1 ${isBright ? 'text-slate-600' : 'text-slate-400'}`}>
-                        Password
-                      </label>
-                      <input
-                        type="password"
-                        value={pgConfig.password || ''}
-                        onChange={(e) => setPgConfig((p) => ({ ...p, password: e.target.value }))}
-                        placeholder="••••••••"
-                        className={`w-full px-3 py-1.5 text-xs rounded-lg border font-mono ${
-                          isBright ? 'bg-white border-slate-300 text-slate-800' : 'bg-[#080d1a] border-[#1b2b4d] text-slate-200'
-                        }`}
-                      />
-                    </div>
-                  </div>
+                  )}
+
+                  {/* Mode: Bridge / Standard Gateway */}
+                  {(pgConfig.mode === 'bridge' || pgConfig.mode === 'demo') && (
+                    <>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="col-span-2">
+                          <label className={`block text-[11px] font-semibold mb-1 ${isBright ? 'text-slate-600' : 'text-slate-400'}`}>
+                            Host / Endpoint
+                          </label>
+                          <input
+                            type="text"
+                            value={pgConfig.host}
+                            onChange={(e) => setPgConfig((p) => ({ ...p, host: e.target.value }))}
+                            placeholder="localhost or db.example.com"
+                            className={`w-full px-3 py-1.5 text-xs rounded-lg border font-mono ${
+                              isBright ? 'bg-white border-slate-300 text-slate-800' : 'bg-[#080d1a] border-[#1b2b4d] text-slate-200'
+                            }`}
+                          />
+                        </div>
+                        <div>
+                          <label className={`block text-[11px] font-semibold mb-1 ${isBright ? 'text-slate-600' : 'text-slate-400'}`}>
+                            Port
+                          </label>
+                          <input
+                            type="number"
+                            value={pgConfig.port}
+                            onChange={(e) => setPgConfig((p) => ({ ...p, port: parseInt(e.target.value, 10) || 5432 }))}
+                            placeholder="5432"
+                            className={`w-full px-3 py-1.5 text-xs rounded-lg border font-mono ${
+                              isBright ? 'bg-white border-slate-300 text-slate-800' : 'bg-[#080d1a] border-[#1b2b4d] text-slate-200'
+                            }`}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                          <label className={`block text-[11px] font-semibold mb-1 ${isBright ? 'text-slate-600' : 'text-slate-400'}`}>
+                            Database
+                          </label>
+                          <input
+                            type="text"
+                            value={pgConfig.database}
+                            onChange={(e) => setPgConfig((p) => ({ ...p, database: e.target.value }))}
+                            placeholder="postgres"
+                            className={`w-full px-3 py-1.5 text-xs rounded-lg border font-mono ${
+                              isBright ? 'bg-white border-slate-300 text-slate-800' : 'bg-[#080d1a] border-[#1b2b4d] text-slate-200'
+                            }`}
+                          />
+                        </div>
+                        <div>
+                          <label className={`block text-[11px] font-semibold mb-1 ${isBright ? 'text-slate-600' : 'text-slate-400'}`}>
+                            Username
+                          </label>
+                          <input
+                            type="text"
+                            value={pgConfig.user}
+                            onChange={(e) => setPgConfig((p) => ({ ...p, user: e.target.value }))}
+                            placeholder="postgres"
+                            className={`w-full px-3 py-1.5 text-xs rounded-lg border font-mono ${
+                              isBright ? 'bg-white border-slate-300 text-slate-800' : 'bg-[#080d1a] border-[#1b2b4d] text-slate-200'
+                            }`}
+                          />
+                        </div>
+                        <div>
+                          <label className={`block text-[11px] font-semibold mb-1 ${isBright ? 'text-slate-600' : 'text-slate-400'}`}>
+                            Password
+                          </label>
+                          <input
+                            type="password"
+                            value={pgConfig.password || ''}
+                            onChange={(e) => setPgConfig((p) => ({ ...p, password: e.target.value }))}
+                            placeholder="••••••••"
+                            className={`w-full px-3 py-1.5 text-xs rounded-lg border font-mono ${
+                              isBright ? 'bg-white border-slate-300 text-slate-800' : 'bg-[#080d1a] border-[#1b2b4d] text-slate-200'
+                            }`}
+                          />
+                        </div>
+                      </div>
+
+                      {pgConfig.mode === 'bridge' && (
+                        <div>
+                          <label className={`block text-[11px] font-semibold mb-1 ${isBright ? 'text-slate-600' : 'text-slate-400'}`}>
+                            Bridge / Gateway URL (Local or Remote Cloudflare Worker)
+                          </label>
+                          <input
+                            type="text"
+                            value={pgConfig.bridgeUrl || 'http://localhost:54321'}
+                            onChange={(e) => setPgConfig((p) => ({ ...p, bridgeUrl: e.target.value }))}
+                            placeholder="http://localhost:54321 or https://my-proxy.workers.dev"
+                            className={`w-full px-3 py-1.5 text-xs rounded-lg border font-mono ${
+                              isBright ? 'bg-white border-slate-300 text-slate-800' : 'bg-[#080d1a] border-[#1b2b4d] text-slate-200'
+                            }`}
+                          />
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               )}
 
               {/* 2. AWS CLOUD FORM */}
               {activeProvider === 'aws' && (
                 <div className="space-y-3">
-                  {/* AWS Sub-service Selector */}
                   <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                    <button
+                      type="button"
+                      onClick={() => setAwsConfig((p) => ({ ...p, service: 's3' }))}
+                      className={`px-3 py-1 text-xs rounded-md font-medium transition cursor-pointer ${
+                        awsConfig.service === 's3' ? 'bg-emerald-600 text-white font-bold' : 'bg-[#121f38] text-slate-300'
+                      }`}
+                    >
+                      🪣 S3 Buckets & Direct URL
+                    </button>
                     <button
                       type="button"
                       onClick={() => setAwsConfig((p) => ({ ...p, service: 'athena' }))}
@@ -805,15 +1222,6 @@ export const DatabaseConnectionModal: React.FC<DatabaseConnectionModalProps> = (
                     </button>
                     <button
                       type="button"
-                      onClick={() => setAwsConfig((p) => ({ ...p, service: 's3' }))}
-                      className={`px-3 py-1 text-xs rounded-md font-medium transition cursor-pointer ${
-                        awsConfig.service === 's3' ? 'bg-emerald-600 text-white font-bold' : 'bg-[#121f38] text-slate-300'
-                      }`}
-                    >
-                      🪣 S3 Buckets
-                    </button>
-                    <button
-                      type="button"
                       onClick={() => setAwsConfig((p) => ({ ...p, service: 'rds' }))}
                       className={`px-3 py-1 text-xs rounded-md font-medium transition cursor-pointer ${
                         awsConfig.service === 'rds' ? 'bg-blue-600 text-white font-bold' : 'bg-[#121f38] text-slate-300'
@@ -822,6 +1230,31 @@ export const DatabaseConnectionModal: React.FC<DatabaseConnectionModalProps> = (
                       🐬 RDS / Aurora
                     </button>
                   </div>
+
+                  {awsConfig.service === 's3' && (
+                    <div className="space-y-2 p-3 rounded-xl border bg-emerald-950/20 border-emerald-500/30">
+                      <div className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                        <Zap className="w-3.5 h-3.5" />
+                        <span>Direct S3 Presigned URL (Zero Local Bridge)</span>
+                      </div>
+                      <p className="text-[11px] text-slate-300">
+                        Paste any S3 Presigned URL or public S3 object link to fetch CSV, JSON, or Excel directly in your browser.
+                      </p>
+                      <input
+                        type="text"
+                        value={awsConfig.s3PresignedUrl || ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setAwsConfig((p) => ({ ...p, s3PresignedUrl: val, mode: 'direct' }));
+                          handleS3UriChange(val);
+                        }}
+                        placeholder="https://my-bucket.s3.us-east-1.amazonaws.com/sales_report.csv?..."
+                        className={`w-full px-3 py-1.5 text-xs rounded-lg border font-mono ${
+                          isBright ? 'bg-white border-slate-300 text-slate-800' : 'bg-[#080d1a] border-[#1b2b4d] text-slate-200'
+                        }`}
+                      />
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
@@ -876,40 +1309,6 @@ export const DatabaseConnectionModal: React.FC<DatabaseConnectionModalProps> = (
                         />
                       </div>
                     )}
-
-                    {awsConfig.service === 's3' && (
-                      <div>
-                        <label className={`block text-[11px] font-semibold mb-1 ${isBright ? 'text-slate-600' : 'text-slate-400'}`}>
-                          S3 Bucket Name
-                        </label>
-                        <input
-                          type="text"
-                          value={awsConfig.s3Bucket || ''}
-                          onChange={(e) => setAwsConfig((p) => ({ ...p, s3Bucket: e.target.value }))}
-                          placeholder="corp-analytics-datalake"
-                          className={`w-full px-3 py-1.5 text-xs rounded-lg border font-mono ${
-                            isBright ? 'bg-white border-slate-300 text-slate-800' : 'bg-[#080d1a] border-[#1b2b4d] text-slate-200'
-                          }`}
-                        />
-                      </div>
-                    )}
-
-                    {awsConfig.service === 'rds' && (
-                      <div>
-                        <label className={`block text-[11px] font-semibold mb-1 ${isBright ? 'text-slate-600' : 'text-slate-400'}`}>
-                          Aurora / RDS Endpoint
-                        </label>
-                        <input
-                          type="text"
-                          value={awsConfig.rdsHost || ''}
-                          onChange={(e) => setAwsConfig((p) => ({ ...p, rdsHost: e.target.value }))}
-                          placeholder="aurora-cluster.rds.amazonaws.com"
-                          className={`w-full px-3 py-1.5 text-xs rounded-lg border font-mono ${
-                            isBright ? 'bg-white border-slate-300 text-slate-800' : 'bg-[#080d1a] border-[#1b2b4d] text-slate-200'
-                          }`}
-                        />
-                      </div>
-                    )}
                   </div>
                 </div>
               )}
@@ -917,6 +1316,32 @@ export const DatabaseConnectionModal: React.FC<DatabaseConnectionModalProps> = (
               {/* 3. SNOWFLAKE FORM */}
               {activeProvider === 'snowflake' && (
                 <div className="space-y-3">
+                  {snowConfig.mode === 'direct_rest' && (
+                    <div className="space-y-2 p-3 rounded-xl border bg-emerald-950/20 border-emerald-500/30">
+                      <div className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                        <Zap className="w-3.5 h-3.5" />
+                        <span>Direct Snowflake SQL REST API v2 (Zero Local Bridge)</span>
+                      </div>
+                      <p className="text-[11px] text-slate-300">
+                        Query Snowflake directly via HTTPS with OAuth, Programmatic Access Tokens (PAT), or Key-Pair JWT.
+                      </p>
+                      <div>
+                        <label className={`block text-[11px] font-semibold mb-1 ${isBright ? 'text-slate-600' : 'text-slate-400'}`}>
+                          OAuth Bearer Token or Programmatic Access Token (PAT)
+                        </label>
+                        <input
+                          type="password"
+                          value={snowConfig.token || ''}
+                          onChange={(e) => setSnowConfig((p) => ({ ...p, token: e.target.value }))}
+                          placeholder="eyJraWQiOiI..."
+                          className={`w-full px-3 py-1.5 text-xs rounded-lg border font-mono ${
+                            isBright ? 'bg-white border-slate-300 text-slate-800' : 'bg-[#080d1a] border-[#1b2b4d] text-slate-200'
+                          }`}
+                        />
+                      </div>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className={`block text-[11px] font-semibold mb-1 ${isBright ? 'text-slate-600' : 'text-slate-400'}`}>
@@ -979,13 +1404,13 @@ export const DatabaseConnectionModal: React.FC<DatabaseConnectionModalProps> = (
                     </div>
                     <div>
                       <label className={`block text-[11px] font-semibold mb-1 ${isBright ? 'text-slate-600' : 'text-slate-400'}`}>
-                        Username
+                        Role
                       </label>
                       <input
                         type="text"
-                        value={snowConfig.username}
-                        onChange={(e) => setSnowConfig((p) => ({ ...p, username: e.target.value }))}
-                        placeholder="snow_analyst"
+                        value={snowConfig.role}
+                        onChange={(e) => setSnowConfig((p) => ({ ...p, role: e.target.value }))}
+                        placeholder="ACCOUNTADMIN"
                         className={`w-full px-3 py-1.5 text-xs rounded-lg border font-mono ${
                           isBright ? 'bg-white border-slate-300 text-slate-800' : 'bg-[#080d1a] border-[#1b2b4d] text-slate-200'
                         }`}
@@ -998,6 +1423,32 @@ export const DatabaseConnectionModal: React.FC<DatabaseConnectionModalProps> = (
               {/* 4. GOOGLE BIGQUERY FORM */}
               {activeProvider === 'bigquery' && (
                 <div className="space-y-3">
+                  {bqConfig.mode === 'direct_rest' && (
+                    <div className="space-y-2 p-3 rounded-xl border bg-emerald-950/20 border-emerald-500/30">
+                      <div className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                        <Zap className="w-3.5 h-3.5" />
+                        <span>Direct Google BigQuery REST API v2 (Zero Local Bridge)</span>
+                      </div>
+                      <p className="text-[11px] text-slate-300">
+                        Query BigQuery datasets directly via Google Cloud REST APIs with an OAuth access token (generated via <code className="bg-black/40 px-1 py-0.5 rounded text-amber-300">gcloud auth print-access-token</code>).
+                      </p>
+                      <div>
+                        <label className={`block text-[11px] font-semibold mb-1 ${isBright ? 'text-slate-600' : 'text-slate-400'}`}>
+                          Google Cloud OAuth Access Token
+                        </label>
+                        <input
+                          type="password"
+                          value={bqConfig.oauthToken || ''}
+                          onChange={(e) => setBqConfig((p) => ({ ...p, oauthToken: e.target.value }))}
+                          placeholder="ya29.a0AfH6SM..."
+                          className={`w-full px-3 py-1.5 text-xs rounded-lg border font-mono ${
+                            isBright ? 'bg-white border-slate-300 text-slate-800' : 'bg-[#080d1a] border-[#1b2b4d] text-slate-200'
+                          }`}
+                        />
+                      </div>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className={`block text-[11px] font-semibold mb-1 ${isBright ? 'text-slate-600' : 'text-slate-400'}`}>
@@ -1052,7 +1503,113 @@ export const DatabaseConnectionModal: React.FC<DatabaseConnectionModalProps> = (
             </div>
           )}
 
-          {/* TAB: S3 DIRECT URL (AWS only) */}
+          {/* TAB 2: OFFLINE DIRECT SQL / CSV PASTE INGESTER (ZERO BRIDGE) */}
+          {subTab === 'paste' && (
+            <div className="space-y-3 animate-in fade-in duration-150">
+              <div
+                className={`p-3.5 rounded-xl border space-y-2.5 ${
+                  isBright ? 'bg-emerald-50/60 border-emerald-300' : 'bg-[#0b1c2b] border-[#163e5c]'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-xs font-bold text-emerald-400">
+                    <ClipboardPaste className="w-4 h-4" />
+                    <span>Direct SQL Dump & DB Query Grid Ingester (100% In-Browser)</span>
+                  </div>
+                  <div className="flex items-center gap-1 text-[11px]">
+                    <span className="text-slate-400">Quick Samples:</span>
+                    <button
+                      type="button"
+                      onClick={() => loadSamplePaste('sql')}
+                      className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 font-medium cursor-pointer"
+                    >
+                      SQL Dump
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => loadSamplePaste('tsv')}
+                      className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 font-medium cursor-pointer"
+                    >
+                      DBeaver TSV
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => loadSamplePaste('csv')}
+                      className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 font-medium cursor-pointer"
+                    >
+                      CSV
+                    </button>
+                  </div>
+                </div>
+
+                <p className={`text-[11px] leading-relaxed ${isBright ? 'text-slate-600' : 'text-slate-300'}`}>
+                  Export or copy query results from any SQL tool (DBeaver, pgAdmin, Snowflake Snowsight, BigQuery Studio, DataGrip, or pg_dump) and paste them below. SheetSQL automatically parses schema and rows in memory without network calls or bridge servers.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="sm:col-span-2">
+                    <label className={`block text-[11px] font-semibold mb-1 ${isBright ? 'text-slate-600' : 'text-slate-400'}`}>
+                      Destination Table Name
+                    </label>
+                    <input
+                      type="text"
+                      value={pasteTableName}
+                      onChange={(e) => setPasteTableName(e.target.value)}
+                      placeholder="e.g. enterprise_customers"
+                      className={`w-full px-3 py-1.5 text-xs rounded-lg border font-mono ${
+                        isBright ? 'bg-white border-slate-300 text-slate-800' : 'bg-[#080d1a] border-[#1b2b4d] text-slate-200'
+                      }`}
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    {detectedInfo ? (
+                      <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center gap-2 w-full">
+                        <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                        <span className="font-mono text-[11px]">
+                          Format: <strong className="uppercase">{detectedInfo.format}</strong> ({detectedInfo.lineCount} lines)
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="p-2 rounded-lg bg-black/20 text-slate-400 text-xs font-mono text-[11px] w-full text-center">
+                        Waiting for input...
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <textarea
+                  value={pasteText}
+                  onChange={(e) => setPasteText(e.target.value)}
+                  placeholder={`-- Paste SQL statements (CREATE TABLE & INSERT INTO), or\n-- Paste copy-pasted grid rows from DBeaver / Snowflake / BigQuery, or\n-- Paste CSV text with headers...`}
+                  rows={8}
+                  className={`w-full p-2.5 text-xs font-mono rounded-lg border resize-none ${
+                    isBright ? 'bg-white border-slate-300 text-slate-800' : 'bg-[#080d1a] border-[#1b2b4d] text-slate-200'
+                  }`}
+                />
+
+                {pasteError && (
+                  <div className="p-2.5 rounded-lg bg-rose-950/30 border border-rose-500/40 text-rose-300 text-xs flex items-center gap-2">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0 text-rose-400" />
+                    <span>{pasteError}</span>
+                  </div>
+                )}
+
+                <div className="flex justify-end pt-1">
+                  <button
+                    type="button"
+                    disabled={!pasteText.trim()}
+                    onClick={handleImportPasted}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 transition cursor-pointer shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <ArrowRight className="w-3.5 h-3.5" />
+                    <span>Import Pasted Table into SheetSQL</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: S3 DIRECT URL */}
           {subTab === 's3_url' && activeProvider === 'aws' && (
             <div className="space-y-3 animate-in fade-in duration-150">
               <div
@@ -1060,10 +1617,13 @@ export const DatabaseConnectionModal: React.FC<DatabaseConnectionModalProps> = (
                   isBright ? 'bg-emerald-50/50 border-emerald-200' : 'bg-[#0c1b2c] border-[#1a3854]'
                 }`}
               >
-                <div className="flex items-center gap-2 text-xs font-bold text-emerald-500">
+                <div className="flex items-center gap-2 text-xs font-bold text-emerald-400">
                   <Link2 className="w-4 h-4" />
-                  <span>Direct S3 Presigned URL or Public S3 Link</span>
+                  <span>Direct S3 Presigned URL or Public S3 Link (Zero Local Bridge)</span>
                 </div>
+                <p className={`text-[11px] ${isBright ? 'text-slate-600' : 'text-slate-300'}`}>
+                  In the AWS S3 Console, click your object (CSV, TSV, or XLSX) and choose &quot;Share with a presigned URL&quot; (or use any public bucket URL). SheetSQL downloads and parses it directly in your browser.
+                </p>
                 <textarea
                   value={rawS3Input}
                   onChange={(e) => handleS3UriChange(e.target.value)}
@@ -1077,7 +1637,7 @@ export const DatabaseConnectionModal: React.FC<DatabaseConnectionModalProps> = (
             </div>
           )}
 
-          {/* TAB: INSTANT DEMO DATASETS */}
+          {/* TAB 4: INSTANT DEMO DATASETS */}
           {subTab === 'samples' && (
             <div className="space-y-3 animate-in fade-in duration-150">
               <div
@@ -1212,9 +1772,41 @@ export const DatabaseConnectionModal: React.FC<DatabaseConnectionModalProps> = (
             </div>
           )}
 
-          {/* TAB: NODE.JS BRIDGE GUIDE */}
+          {/* TAB 5: CLOUDFLARE WORKER & NODE.JS BRIDGE GUIDE */}
           {subTab === 'bridge' && (
             <div className="space-y-3 text-xs animate-in fade-in duration-150">
+              {/* Option A: Cloudflare Worker Gateway (Zero Local Bridge) */}
+              <div
+                className={`p-3.5 rounded-xl border ${
+                  isBright ? 'bg-cyan-50/50 border-cyan-200' : 'bg-[#0a1e33] border-[#143d66]'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="font-bold text-sm flex items-center gap-2 text-cyan-400">
+                    <Globe className="w-4 h-4" />
+                    <span>Option 1: Deploy a Free Cloudflare Worker (Zero Local Bridge)</span>
+                  </h4>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(cloudflareWorkerCode);
+                      setCopiedWorker(true);
+                      setTimeout(() => setCopiedWorker(false), 2000);
+                    }}
+                    className="flex items-center gap-1 px-2 py-1 rounded bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 transition cursor-pointer font-medium text-[11px]"
+                  >
+                    {copiedWorker ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedWorker ? 'Copied Worker Script' : 'Copy Worker Script'}</span>
+                  </button>
+                </div>
+                <p className={`text-[11px] leading-relaxed mb-2.5 ${isBright ? 'text-slate-600' : 'text-slate-300'}`}>
+                  Deploy this free 25-line Cloudflare Worker in 30 seconds at <strong className="text-cyan-400">workers.cloudflare.com</strong>. It handles CORS proxying in the cloud 24/7 without needing Node.js or any open terminals on your computer.
+                </p>
+                <div className="p-2 rounded bg-black/40 font-mono text-[10px] text-slate-300 overflow-x-auto max-h-24">
+                  <pre>{cloudflareWorkerCode.slice(0, 320)}...</pre>
+                </div>
+              </div>
+
+              {/* Option B: Local Node.js Bridge */}
               <div
                 className={`p-3.5 rounded-xl border ${
                   isBright ? 'bg-slate-50 border-slate-200' : 'bg-[#0c162e] border-[#182a4d]'
@@ -1222,10 +1814,10 @@ export const DatabaseConnectionModal: React.FC<DatabaseConnectionModalProps> = (
               >
                 <h4 className="font-bold text-sm mb-2 flex items-center gap-2">
                   <Terminal className="w-4 h-4 text-indigo-400" />
-                  <span>Unified Enterprise Database Bridge Server</span>
+                  <span>Option 2: Local Node.js Bridge Server</span>
                 </h4>
                 <p className={`text-[11px] leading-relaxed mb-3 ${isBright ? 'text-slate-600' : 'text-slate-300'}`}>
-                  Connect SheetSQL to your local or private cloud databases (PostgreSQL, AWS, Snowflake, and BigQuery) without exposing sensitive database credentials in browser traffic or hitting CORS issues.
+                  If you are developing locally with terminal access, you can run the included bridge script to connect to private local databases.
                 </p>
 
                 <div className="space-y-2">
@@ -1254,7 +1846,7 @@ export const DatabaseConnectionModal: React.FC<DatabaseConnectionModalProps> = (
           )}
 
           {/* Test Result Message Box */}
-          {testResult && (
+          {testResult && subTab === 'params' && (
             <div
               className={`p-3 rounded-lg border text-xs flex items-start gap-2.5 animate-in fade-in duration-150 ${
                 testResult.success
@@ -1283,7 +1875,7 @@ export const DatabaseConnectionModal: React.FC<DatabaseConnectionModalProps> = (
           )}
 
           {/* Discovered Tables List */}
-          {discoveredItems.length > 0 && (
+          {discoveredItems.length > 0 && subTab === 'params' && (
             <div
               className={`p-3.5 rounded-xl border space-y-2.5 ${
                 isBright ? 'bg-slate-50 border-slate-200' : 'bg-[#0c162e] border-[#182a4d]'
@@ -1367,34 +1959,45 @@ export const DatabaseConnectionModal: React.FC<DatabaseConnectionModalProps> = (
             isBright ? 'bg-slate-100 border-slate-200' : 'bg-[#080d1a] border-[#14213d]'
           }`}
         >
-          {/* Left: Test Connection / Status */}
+          {/* Left: Test Connection / Status (shown in params tab) */}
           <div className="flex items-center gap-2 w-full sm:w-auto">
-            <button
-              type="button"
-              disabled={isTesting}
-              onClick={handleTestConnection}
-              className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer disabled:opacity-50 ${
-                isBright
-                  ? 'bg-white hover:bg-slate-200 text-slate-800 border border-slate-300'
-                  : 'bg-[#121f3d] hover:bg-[#1a2d59] text-slate-200 border border-[#1f3563]'
-              }`}
-            >
-              {isTesting ? <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400" /> : <RefreshCw className="w-3.5 h-3.5 text-indigo-400" />}
-              <span>{isTesting ? 'Testing...' : 'Test Connection'}</span>
-            </button>
+            {subTab === 'params' && (
+              <>
+                <button
+                  type="button"
+                  disabled={isTesting}
+                  onClick={handleTestConnection}
+                  className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer disabled:opacity-50 ${
+                    isBright
+                      ? 'bg-white hover:bg-slate-200 text-slate-800 border border-slate-300'
+                      : 'bg-[#121f3d] hover:bg-[#1a2d59] text-slate-200 border border-[#1f3563]'
+                  }`}
+                >
+                  {isTesting ? <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400" /> : <RefreshCw className="w-3.5 h-3.5 text-indigo-400" />}
+                  <span>{isTesting ? 'Testing...' : 'Test Connection'}</span>
+                </button>
 
-            {discoveredItems.length === 0 && (
-              <button
-                type="button"
-                disabled={isFetchingTables}
-                onClick={handleFetchTables}
-                className={`flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer disabled:opacity-50 ${
-                  isBright ? 'hover:bg-slate-200 text-slate-700' : 'hover:bg-[#121f3d] text-slate-300'
-                }`}
-              >
-                {isFetchingTables ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Database className="w-3.5 h-3.5" />}
-                <span>Discover Tables</span>
-              </button>
+                {discoveredItems.length === 0 && (
+                  <button
+                    type="button"
+                    disabled={isFetchingTables}
+                    onClick={handleFetchTables}
+                    className={`flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer disabled:opacity-50 ${
+                      isBright ? 'hover:bg-slate-200 text-slate-700' : 'hover:bg-[#121f3d] text-slate-300'
+                    }`}
+                  >
+                    {isFetchingTables ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Database className="w-3.5 h-3.5" />}
+                    <span>Discover Tables</span>
+                  </button>
+                )}
+              </>
+            )}
+
+            {subTab === 'paste' && (
+              <span className="text-xs text-slate-400 flex items-center gap-1.5">
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Zero Network / Instant Offline AlaSQL Import</span>
+              </span>
             )}
 
             {importProgress && (
@@ -1417,25 +2020,37 @@ export const DatabaseConnectionModal: React.FC<DatabaseConnectionModalProps> = (
               Cancel
             </button>
 
-            <button
-              type="button"
-              disabled={selectedCount === 0 || isImporting}
-              onClick={handleImport}
-              className={`flex items-center justify-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold text-white transition cursor-pointer shadow-md disabled:opacity-50 disabled:cursor-not-allowed ${
-                activeProvider === 'postgres'
-                  ? 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-900/30'
-                  : activeProvider === 'aws'
-                  ? 'bg-amber-600 hover:bg-amber-500 shadow-amber-900/30'
-                  : activeProvider === 'snowflake'
-                  ? 'bg-cyan-600 hover:bg-cyan-500 shadow-cyan-900/30'
-                  : 'bg-blue-600 hover:bg-blue-500 shadow-blue-900/30'
-              }`}
-            >
-              {isImporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ArrowRight className="w-3.5 h-3.5" />}
-              <span>
-                {selectedCount > 0 ? `Import ${selectedCount} Table${selectedCount > 1 ? 's' : ''}` : 'Select Tables to Import'}
-              </span>
-            </button>
+            {subTab === 'paste' ? (
+              <button
+                type="button"
+                disabled={!pasteText.trim()}
+                onClick={handleImportPasted}
+                className="flex items-center justify-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 transition cursor-pointer shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <ArrowRight className="w-3.5 h-3.5" />
+                <span>Import Table</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={selectedCount === 0 || isImporting}
+                onClick={handleImport}
+                className={`flex items-center justify-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold text-white transition cursor-pointer shadow-md disabled:opacity-50 disabled:cursor-not-allowed ${
+                  activeProvider === 'postgres'
+                    ? 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-900/30'
+                    : activeProvider === 'aws'
+                    ? 'bg-amber-600 hover:bg-amber-500 shadow-amber-900/30'
+                    : activeProvider === 'snowflake'
+                    ? 'bg-cyan-600 hover:bg-cyan-500 shadow-cyan-900/30'
+                    : 'bg-blue-600 hover:bg-blue-500 shadow-blue-900/30'
+                }`}
+              >
+                {isImporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ArrowRight className="w-3.5 h-3.5" />}
+                <span>
+                  {selectedCount > 0 ? `Import ${selectedCount} Table${selectedCount > 1 ? 's' : ''}` : 'Select Tables to Import'}
+                </span>
+              </button>
+            )}
           </div>
         </div>
       </div>

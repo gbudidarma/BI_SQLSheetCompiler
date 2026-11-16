@@ -13,8 +13,9 @@ export interface BigQueryConnectionConfig {
   location: string; // e.g. "US", "EU", "asia-southeast1"
   serviceAccountKeyJson?: string;
   apiKey?: string;
-  bridgeUrl?: string; // Default: 'http://localhost:54321'
-  mode: 'bridge' | 'demo';
+  oauthToken?: string; // Google Cloud OAuth Access Token for direct REST API
+  bridgeUrl?: string; // Default: 'http://localhost:54321' or remote cloud gateway
+  mode: 'direct_rest' | 'bridge' | 'demo';
 }
 
 export interface BigQueryDiscoveredTable {
@@ -171,6 +172,98 @@ export function inferBigQueryColumns(rows: Record<string, any>[]): ColumnInfo[] 
   });
 }
 
+// ============================================================================
+// DIRECT GOOGLE BIGQUERY REST API v2 - ZERO BRIDGE REQUIRED
+// ============================================================================
+
+export async function executeBigQueryRestQuery(
+  config: BigQueryConnectionConfig,
+  sql: string
+): Promise<Record<string, any>[]> {
+  const token = config.oauthToken || config.apiKey;
+  if (!token) {
+    throw new Error(
+      'BigQuery REST API requires a Google Cloud OAuth Access Token (e.g. from gcloud auth print-access-token).'
+    );
+  }
+
+  const endpoint = `https://bigquery.googleapis.com/bigquery/v2/projects/${config.projectId}/queries`;
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      query: sql,
+      useLegacySql: false,
+      location: config.location || 'US',
+      maxResults: 5000,
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error?.message || `BigQuery API HTTP ${response.status}: ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  const fields = data.schema?.fields || [];
+  const colNames = fields.map((f: any) => f.name);
+
+  const rows: Record<string, any>[] = [];
+  (data.rows || []).forEach((r: any) => {
+    const obj: Record<string, any> = {};
+    r.f?.forEach((cell: any, idx: number) => {
+      const col = colNames[idx] || `col_${idx + 1}`;
+      let val = cell.v;
+      if (val !== null && val !== undefined && !isNaN(val) && val !== '') {
+        val = Number(val);
+      }
+      obj[col] = val;
+    });
+    rows.push(obj);
+  });
+
+  return rows;
+}
+
+export async function fetchBigQueryRestTables(
+  config: BigQueryConnectionConfig
+): Promise<BigQueryDiscoveredTable[]> {
+  const token = config.oauthToken || config.apiKey;
+  if (!token) {
+    throw new Error('BigQuery REST API requires an OAuth Access Token.');
+  }
+
+  const endpoint = `https://bigquery.googleapis.com/bigquery/v2/projects/${config.projectId}/datasets/${config.datasetId}/tables`;
+
+  const response = await fetch(endpoint, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error?.message || `Failed to fetch BigQuery tables: HTTP ${response.status}`);
+  }
+
+  const data = await response.json();
+  return (data.tables || []).map((t: any) => ({
+    name: t.tableReference?.tableId || t.id,
+    dataset: config.datasetId,
+    rowCount: 0,
+    columnCount: 0,
+  }));
+}
+
+// ============================================================================
+// CORE BIGQUERY CLIENT
+// ============================================================================
+
 export async function testBigQueryConnection(
   config: BigQueryConnectionConfig
 ): Promise<BigQueryTestResult> {
@@ -190,6 +283,34 @@ export async function testBigQueryConnection(
     };
   }
 
+  // Direct BigQuery REST API v2
+  if (config.mode === 'direct_rest') {
+    try {
+      const rows = await executeBigQueryRestQuery(
+        config,
+        'SELECT CURRENT_TIMESTAMP() AS current_time, @@project_id AS current_project;'
+      );
+      const latency = Math.round(performance.now() - startTime);
+
+      return {
+        success: true,
+        latencyMs: latency,
+        version: 'Google BigQuery Analysis Engine (Direct REST API v2)',
+        projectId: config.projectId,
+        datasetId: config.datasetId,
+        location: config.location,
+      };
+    } catch (err: any) {
+      const latency = Math.round(performance.now() - startTime);
+      return {
+        success: false,
+        latencyMs: latency,
+        error: `BigQuery REST Error: ${err.message}. If Google OAuth token expired, generate a new token via 'gcloud auth print-access-token' or use offline SQL/CSV paste.`,
+      };
+    }
+  }
+
+  // Bridge Mode (Local or Remote Gateway)
   const bridgeUrl = (config.bridgeUrl || 'http://localhost:54321').replace(/\/+$/, '');
 
   try {
@@ -228,7 +349,7 @@ export async function testBigQueryConnection(
     return {
       success: false,
       latencyMs: latency,
-      error: `Could not reach database bridge at ${bridgeUrl}. Run 'npm run bridge' or use the Instant Demo profile to test.`,
+      error: `Could not reach database bridge at ${bridgeUrl}. Use "Direct REST API" or "SQL/CSV Paste" to connect without a local bridge.`,
     };
   }
 }
@@ -256,6 +377,12 @@ export async function fetchBigQueryTables(
     });
   }
 
+  // Direct REST
+  if (config.mode === 'direct_rest') {
+    return fetchBigQueryRestTables(config);
+  }
+
+  // Bridge Mode
   const bridgeUrl = (config.bridgeUrl || 'http://localhost:54321').replace(/\/+$/, '');
   const response = await fetch(`${bridgeUrl}/api/bigquery/tables`, {
     method: 'POST',
@@ -285,6 +412,11 @@ export async function importBigQueryTable(
       DEMO_BIGQUERY_PROFILES[0];
     const dataset = getBigQueryDemoDataset(activeProfile.id);
     rows = dataset[tableName] || [];
+  } else if (config.mode === 'direct_rest') {
+    rows = await executeBigQueryRestQuery(
+      config,
+      `SELECT * FROM \`${config.projectId}.${config.datasetId}.${tableName}\` LIMIT 10000;`
+    );
   } else {
     const bridgeUrl = (config.bridgeUrl || 'http://localhost:54321').replace(/\/+$/, '');
     const response = await fetch(`${bridgeUrl}/api/bigquery/query`, {
@@ -307,6 +439,11 @@ export async function importBigQueryTable(
 
   const columns = inferBigQueryColumns(rows);
 
+  const connectionLabel =
+    config.mode === 'direct_rest'
+      ? `BigQuery REST API [${config.projectId}:${config.datasetId}]`
+      : config.name || `BigQuery [${config.projectId}:${config.datasetId}]`;
+
   const schema: TableSchema = {
     id: `bq_${config.projectId}_${tableName}`,
     name: tableName,
@@ -317,7 +454,7 @@ export async function importBigQueryTable(
     previewRows: rows.slice(0, 50),
     allRows: rows,
     sourceType: 'bigquery',
-    connectionName: config.name || `BigQuery [${config.projectId}:${config.datasetId}]`,
+    connectionName: connectionLabel,
   };
 
   return { schema, rows };
