@@ -98,14 +98,33 @@ export function autoDetectKeyColumn(tableA: TableSchema, tableB: TableSchema): s
 /**
  * Compares data records row-by-row and cell-by-cell between two tables.
  */
+/**
+ * Compares data records row-by-row and cell-by-cell between two tables.
+ * Supports single or multi-column (composite) identity keys (e.g. ['customer', 'order_date']).
+ */
 export function compareData(
   tableA: TableSchema,
   dataA: Record<string, any>[],
   tableB: TableSchema,
   dataB: Record<string, any>[],
-  keyColumn?: string
+  keyColumn?: string | string[]
 ): DataDiffResult {
-  const key = keyColumn || autoDetectKeyColumn(tableA, tableB);
+  // Normalize key columns to an array of valid strings
+  let keys: string[] = [];
+  if (Array.isArray(keyColumn)) {
+    keys = keyColumn.map((k) => String(k).trim()).filter(Boolean);
+  } else if (typeof keyColumn === 'string' && keyColumn.trim()) {
+    // Support comma or plus separated e.g. "customer, order_date" or "customer + order_date"
+    keys = keyColumn
+      .split(/[,+]/)
+      .map((k) => k.trim())
+      .filter(Boolean);
+  }
+
+  if (keys.length === 0) {
+    const auto = autoDetectKeyColumn(tableA, tableB);
+    if (auto) keys = [auto];
+  }
 
   // Common columns
   const commonCols = tableA.columns
@@ -120,7 +139,7 @@ export function compareData(
   let onlyInACount = 0;
   let onlyInBCount = 0;
 
-  if (!key) {
+  if (keys.length === 0) {
     // If no key exists, compare by row index
     const maxRows = Math.max(dataA.length, dataB.length);
     for (let i = 0; i < maxRows; i++) {
@@ -172,18 +191,28 @@ export function compareData(
       }
     }
   } else {
-    // Compare indexed by key
+    // Build helper to generate composite row key
+    const buildRowKey = (row: Record<string, any>, idx: number): string => {
+      const parts = keys.map((k) => {
+        const val = row[k];
+        return val !== null && val !== undefined ? String(val).trim() : '';
+      });
+      if (parts.every((p) => p === '')) {
+        return `_row_${idx}`;
+      }
+      return parts.join(' | ');
+    };
+
+    // Compare indexed by composite key
     const mapA = new Map<string, Record<string, any>>();
     dataA.forEach((row, idx) => {
-      const val = row[key];
-      const k = val !== null && val !== undefined ? String(val) : `_row_${idx}`;
+      const k = buildRowKey(row, idx);
       mapA.set(k, row);
     });
 
     const mapB = new Map<string, Record<string, any>>();
     dataB.forEach((row, idx) => {
-      const val = row[key];
-      const k = val !== null && val !== undefined ? String(val) : `_row_${idx}`;
+      const k = buildRowKey(row, idx);
       mapB.set(k, row);
     });
 
@@ -212,7 +241,6 @@ export function compareData(
         commonCols.forEach((col) => {
           const valA = rowA[col];
           const valB = rowB[col];
-          // Handle loose numeric comparison if types match or coerce
           const strA = valA !== null && valA !== undefined ? String(valA).trim() : '';
           const strB = valB !== null && valB !== undefined ? String(valB).trim() : '';
 
@@ -249,28 +277,54 @@ export function compareData(
   );
 
   // Generate reconciliation SQL
-  const commonJoinCols = commonCols.map((c) => `a.${c} AS a_${c}, b.${c} AS b_${c}`).join(', ');
+  const keyLabel = keys.join(' + ');
+  const nonKeyCols = commonCols.filter((c) => !keys.includes(c));
+  const commonJoinCols = nonKeyCols.map((c) => `a.${c} AS a_${c}, b.${c} AS b_${c}`).join(', ');
+
+  const diffKeySelect = keys.length > 0
+    ? keys.map((k) => `COALESCE(a.${k}, b.${k}) AS diff_${k}`).join(',\n  ')
+    : 'COALESCE(a.id, b.id) AS diff_key';
+
+  const onClause = keys.length > 0
+    ? keys.map((k) => `a.${k} = b.${k}`).join('\n AND ')
+    : 'a.id = b.id';
+
+  const caseAddedCondition = keys.length > 0
+    ? keys.map((k) => `a.${k} IS NULL`).join(' OR ')
+    : 'a.id IS NULL';
+
+  const caseRemovedCondition = keys.length > 0
+    ? keys.map((k) => `b.${k} IS NULL`).join(' OR ')
+    : 'b.id IS NULL';
+
+  const whereNullClause = keys.length > 0
+    ? keys.map((k) => `a.${k} IS NULL\n    OR b.${k} IS NULL`).join('\n    OR ')
+    : 'a.id IS NULL OR b.id IS NULL';
+
+  const whereMismatchClause =
+    nonKeyCols.slice(0, 3).map((c) => `a.${c} <> b.${c}`).join(' OR ') || 'FALSE';
+
   const reconciliationSql = `/* Reconciliation Query: ${tableA.name} vs ${tableB.name} */
+/* Join Identity: ${keyLabel || 'Row Index'} */
 SELECT
-  COALESCE(a.${key}, b.${key}) AS diff_key,
+  ${diffKeySelect},
   CASE
-    WHEN a.${key} IS NULL THEN 'ADDED_IN_${tableB.name.toUpperCase()}'
-    WHEN b.${key} IS NULL THEN 'REMOVED_IN_${tableB.name.toUpperCase()}'
+    WHEN ${caseAddedCondition} THEN 'ADDED_IN_${tableB.name.toUpperCase()}'
+    WHEN ${caseRemovedCondition} THEN 'REMOVED_IN_${tableB.name.toUpperCase()}'
     ELSE 'MODIFIED'
-  END AS diff_status,
-  ${commonJoinCols}
+  END AS diff_status${commonJoinCols ? ',\n  ' + commonJoinCols : ''}
 FROM ${tableA.name} a
 FULL OUTER JOIN ${tableB.name} b
-  ON a.${key} = b.${key}
-WHERE a.${key} IS NULL
-   OR b.${key} IS NULL
-   OR ${commonCols.slice(0, 3).map((c) => `a.${c} <> b.${c}`).join(' OR ') || 'FALSE'}
+  ON ${onClause}
+WHERE ${whereNullClause}
+   OR ${whereMismatchClause}
 LIMIT 100;`;
 
   return {
     tableAName: tableA.name,
     tableBName: tableB.name,
-    keyColumn: key,
+    keyColumn: keyLabel,
+    keyColumns: keys,
     totalRowsA: dataA.length,
     totalRowsB: dataB.length,
     identicalCount,

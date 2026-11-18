@@ -14,7 +14,9 @@ import {
   X,
   ExternalLink,
   ChevronRight,
-  Database
+  Database,
+  Key,
+  Plus
 } from 'lucide-react';
 import { TableSchema } from '../types';
 import { compareSchemas, compareData, autoDetectKeyColumn } from '../utils/schemaComparator';
@@ -49,7 +51,7 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
   });
 
   const [activeTab, setActiveTab] = useState<'schema' | 'data' | 'reconciliation'>('schema');
-  const [customKeyCol, setCustomKeyCol] = useState<string>('');
+  const [customKeyCols, setCustomKeyCols] = useState<string[]>([]);
   const [dataFilter, setDataFilter] = useState<'all' | 'modified' | 'only_a' | 'only_b' | 'identical'>('all');
   const [copiedSql, setCopiedSql] = useState(false);
   const [searchFilter, setSearchFilter] = useState('');
@@ -92,18 +94,28 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
       .filter((name) => tableB.columns.some((cB) => cB.name.toLowerCase() === name.toLowerCase()));
   }, [tableA, tableB]);
 
-  // Effective key column
-  const effectiveKey = useMemo(() => {
-    if (customKeyCol && commonColumns.includes(customKeyCol)) return customKeyCol;
-    if (tableA && tableB) return autoDetectKeyColumn(tableA, tableB);
-    return '';
-  }, [customKeyCol, commonColumns, tableA, tableB]);
+  // Effective key columns (supports single or multi-column composite identity)
+  const effectiveKeys = useMemo(() => {
+    const validCustom = customKeyCols.filter((col) => commonColumns.includes(col));
+    if (validCustom.length > 0) return validCustom;
+    if (tableA && tableB) {
+      const auto = autoDetectKeyColumn(tableA, tableB);
+      return auto ? [auto] : [];
+    }
+    return [];
+  }, [customKeyCols, commonColumns, tableA, tableB]);
+
+  const effectiveKeyLabel = useMemo(() => effectiveKeys.join(' + '), [effectiveKeys]);
+
+  const availableAddKeys = useMemo(() => {
+    return commonColumns.filter((col) => !effectiveKeys.includes(col));
+  }, [commonColumns, effectiveKeys]);
 
   // Data diff result
   const dataDiff = useMemo(() => {
     if (!tableA || !tableB) return null;
-    return compareData(tableA, dataA, tableB, dataB, effectiveKey);
-  }, [tableA, dataA, tableB, dataB, effectiveKey]);
+    return compareData(tableA, dataA, tableB, dataB, effectiveKeys);
+  }, [tableA, dataA, tableB, dataB, effectiveKeys]);
 
   // Filtered rows for data comparison tab
   const filteredDiffRows = useMemo(() => {
@@ -431,21 +443,93 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
           <div className="space-y-6 max-w-6xl mx-auto">
             {/* Key Selector & Controls */}
             <div className="flex flex-wrap items-center justify-between gap-4 bg-[#0b162f] p-4 rounded-xl border border-[#182c54]">
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-semibold text-slate-300">Identity / Join Key:</span>
-                <select
-                  value={effectiveKey}
-                  onChange={(e) => setCustomKeyCol(e.target.value)}
-                  className="bg-[#070e1c] border border-[#1b315e] text-xs text-blue-300 font-mono rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-500 cursor-pointer"
-                >
-                  {commonColumns.map((col) => (
-                    <option key={col} value={col}>
-                      {col} {col === effectiveKey ? '(Auto-Detected Key)' : ''}
-                    </option>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-300">
+                  <Key className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                  <span>Identity / Join Key:</span>
+                </div>
+
+                {/* Composite Join Key Chips & Selectors */}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {effectiveKeys.map((col, idx) => (
+                    <div
+                      key={col}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-950/80 border border-blue-500/50 text-xs font-mono text-blue-200 shadow-xs"
+                    >
+                      {idx > 0 && <span className="text-blue-400 font-sans font-bold text-[10px] mr-0.5">+</span>}
+                      <span>{col}</span>
+                      {effectiveKeys.length > 1 ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCustomKeyCols(effectiveKeys.filter((k) => k !== col));
+                          }}
+                          className="p-0.5 hover:bg-blue-800/60 rounded text-blue-300 hover:text-white transition cursor-pointer"
+                          title={`Remove ${col} from join key`}
+                          aria-label={`Remove ${col}`}
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      ) : (
+                        <span className="text-[10px] text-blue-400 font-sans opacity-70">
+                          {col === autoDetectKeyColumn(tableA!, tableB!) ? '(Auto)' : ''}
+                        </span>
+                      )}
+                    </div>
                   ))}
-                </select>
-                <span className="text-xs text-slate-500">
-                  Used to correlate matching records between both datasets.
+
+                  {/* Add Key Column Dropdown (e.g. + Order Date, + Line Item) */}
+                  {availableAddKeys.length > 0 && (
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          setCustomKeyCols([...effectiveKeys, e.target.value]);
+                        }
+                      }}
+                      className="bg-[#070e1c] hover:bg-[#0c1830] border border-dashed border-blue-500/40 hover:border-blue-400 text-xs text-blue-300 font-medium rounded-lg px-2.5 py-1 focus:outline-none cursor-pointer transition shadow-xs"
+                      title="Add another column to form a composite key (e.g. customer + order_date)"
+                    >
+                      <option value="" disabled>+ Add Join Key...</option>
+                      {availableAddKeys.map((col) => (
+                        <option key={col} value={col}>+ {col}</option>
+                      ))}
+                    </select>
+                  )}
+
+                  {/* Single Key Switcher (when only 1 key is selected, allowing easy 1-click change) */}
+                  {effectiveKeys.length === 1 && (
+                    <select
+                      value={effectiveKeys[0]}
+                      onChange={(e) => setCustomKeyCols([e.target.value])}
+                      className="bg-[#070e1c] border border-[#1b315e] text-xs text-slate-300 font-mono rounded-lg px-2 py-1 focus:outline-none focus:border-blue-500 cursor-pointer"
+                      title="Switch primary join key"
+                    >
+                      {commonColumns.map((col) => (
+                        <option key={col} value={col}>
+                          Switch to: {col} {col === autoDetectKeyColumn(tableA!, tableB!) ? '(Auto-Detected)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+
+                  {/* Reset to Auto Button */}
+                  {customKeyCols.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setCustomKeyCols([])}
+                      className="text-[11px] text-slate-400 hover:text-blue-300 underline cursor-pointer ml-1"
+                      title="Reset to auto-detected key"
+                    >
+                      Reset to Auto
+                    </button>
+                  )}
+                </div>
+
+                <span className="text-[11px] text-slate-400 block w-full sm:w-auto mt-0.5 sm:mt-0">
+                  {effectiveKeys.length > 1
+                    ? `(Composite Key: matches rows when all ${effectiveKeys.length} columns correlate)`
+                    : 'Used to correlate matching records between both datasets.'}
                 </span>
               </div>
 
@@ -575,7 +659,7 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
                 <table className="w-full text-left border-collapse text-xs">
                   <thead className="sticky top-0 bg-[#081022] z-10 border-b border-[#182c54] text-slate-400 font-semibold uppercase tracking-wider text-[10px]">
                     <tr>
-                      <th className="py-2.5 px-4 font-mono">Key ({effectiveKey})</th>
+                      <th className="py-2.5 px-4 font-mono">Key ({effectiveKeyLabel})</th>
                       <th className="py-2.5 px-4">Status</th>
                       {commonColumns.map((col) => (
                         <th key={col} className="py-2.5 px-4 font-mono truncate max-w-[200px]">
@@ -604,7 +688,18 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
                           }`}
                         >
                           <td className="py-2.5 px-4 font-bold text-slate-100">
-                            {row.key}
+                            {row.key.includes(' | ') ? (
+                              <span className="inline-flex items-center gap-1.5 flex-wrap">
+                                {row.key.split(' | ').map((part, pIdx) => (
+                                  <span key={pIdx} className="inline-flex items-center gap-1.5">
+                                    {pIdx > 0 && <span className="text-slate-500 font-normal">|</span>}
+                                    <span>{part}</span>
+                                  </span>
+                                ))}
+                              </span>
+                            ) : (
+                              row.key
+                            )}
                           </td>
                           <td className="py-2.5 px-4">
                             {isMod ? (
@@ -666,8 +761,13 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
             <div className="bg-[#0b162f] border border-[#182c54] rounded-xl p-5 space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-base font-semibold text-slate-100 flex items-center gap-2">
-                    Auto-Generated Reconciliation SQL
+                  <h3 className="text-base font-semibold text-slate-100 flex items-center gap-2 flex-wrap">
+                    <span>Auto-Generated Reconciliation SQL</span>
+                    {effectiveKeys.length > 1 && (
+                      <span className="text-xs font-normal font-mono px-2 py-0.5 rounded-md bg-blue-950 text-blue-300 border border-blue-800">
+                        Composite: {effectiveKeyLabel}
+                      </span>
+                    )}
                   </h3>
                   <p className="text-xs text-slate-400 mt-0.5">
                     Execute this query in the SQL Studio to inspect all discrepancy records directly in the data engine.

@@ -161,6 +161,7 @@ export interface DataDiffResult {
   tableAName: string;
   tableBName: string;
   keyColumn: string;
+  keyColumns?: string[];
   totalRowsA: number;
   totalRowsB: number;
   identicalCount: number;
