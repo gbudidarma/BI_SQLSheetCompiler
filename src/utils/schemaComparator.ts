@@ -134,6 +134,7 @@ export function compareData(
     );
 
   const diffRows: DataDiffRow[] = [];
+  const columnDiscrepancies: Record<string, number> = {};
   let identicalCount = 0;
   let modifiedCount = 0;
   let onlyInACount = 0;
@@ -167,6 +168,7 @@ export function compareData(
           const valB = rowB[col];
           if (String(valA ?? '') !== String(valB ?? '')) {
             changedCols.push(col);
+            columnDiscrepancies[col] = (columnDiscrepancies[col] || 0) + 1;
           }
         });
 
@@ -246,6 +248,7 @@ export function compareData(
 
           if (strA !== strB) {
             changedCols.push(col);
+            columnDiscrepancies[col] = (columnDiscrepancies[col] || 0) + 1;
           }
         });
 
@@ -334,5 +337,6 @@ LIMIT 100;`;
     matchPercentage,
     diffRows,
     reconciliationSql,
+    columnDiscrepancies,
   };
 }

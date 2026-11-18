@@ -16,7 +16,8 @@ import {
   ChevronRight,
   Database,
   Key,
-  Plus
+  Plus,
+  ArrowRight
 } from 'lucide-react';
 import { TableSchema } from '../types';
 import { compareSchemas, compareData, autoDetectKeyColumn } from '../utils/schemaComparator';
@@ -545,11 +546,17 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
                 </button>
                 <button
                   onClick={() => setDataFilter('modified')}
-                  className={`px-2.5 py-1 rounded transition cursor-pointer font-medium ${
-                    dataFilter === 'modified' ? 'bg-amber-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                  className={`px-2.5 py-1 rounded transition cursor-pointer font-medium flex items-center gap-1.5 ${
+                    dataFilter === 'modified'
+                      ? 'bg-amber-600 text-white font-bold shadow-xs'
+                      : dataDiff.modifiedCount > 0
+                      ? 'bg-amber-950/80 text-amber-300 border border-amber-600/50 hover:bg-amber-900/60'
+                      : 'text-slate-400 hover:text-slate-200'
                   }`}
+                  title="Filter to records with cell value discrepancies (alerts)"
                 >
-                  Modified ({dataDiff.modifiedCount})
+                  {dataDiff.modifiedCount > 0 && <AlertTriangle className="w-3 h-3 text-amber-400" />}
+                  <span>Value Alerts ({dataDiff.modifiedCount})</span>
                 </button>
                 <button
                   onClick={() => setDataFilter('only_a')}
@@ -578,6 +585,56 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
               </div>
             </div>
 
+            {/* VALUE MISMATCH ALERT BANNER */}
+            {dataDiff.modifiedCount > 0 ? (
+              <div className="p-3.5 rounded-xl border bg-gradient-to-r from-amber-950/50 via-[#1f1409]/60 to-[#0b162f] border-amber-500/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg animate-in fade-in">
+                <div className="flex items-start sm:items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/50 flex items-center justify-center text-amber-400 shrink-0">
+                    <AlertTriangle className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-amber-200 flex items-center gap-2">
+                      <span>Value Discrepancy Alert: {dataDiff.modifiedCount} row(s) have cell value differences!</span>
+                      <span className="text-[10px] bg-amber-500/25 text-amber-300 px-1.5 py-0.2 rounded font-mono font-bold border border-amber-500/40">
+                        DIFFERENCE DETECTED
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-slate-300 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                      <span>Mismatched columns:</span>
+                      {Object.entries(dataDiff.columnDiscrepancies || {}).map(([colName, cnt]) => (
+                        <span
+                          key={colName}
+                          className="font-mono text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-900/50 text-amber-200 border border-amber-600/50"
+                        >
+                          {colName} ({cnt} {cnt === 1 ? 'alert' : 'alerts'})
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setDataFilter(dataFilter === 'modified' ? 'all' : 'modified')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs ${
+                      dataFilter === 'modified'
+                        ? 'bg-amber-500 text-slate-950 ring-2 ring-amber-400/50'
+                        : 'bg-amber-600/30 hover:bg-amber-600/50 text-amber-200 border border-amber-500/40'
+                    }`}
+                  >
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    <span>{dataFilter === 'modified' ? 'Showing Alerts Only' : 'View Value Alerts Only'}</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="p-3 rounded-xl border bg-emerald-950/20 border-emerald-500/30 flex items-center gap-2.5 text-xs text-emerald-300">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>Zero Value Discrepancies: All correlating records have matching values across all common attributes.</span>
+              </div>
+            )}
+
             {/* Data Diff Metrics */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div className="bg-[#0b162f] border border-[#182c54] rounded-xl p-4">
@@ -590,8 +647,28 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
                 </div>
               </div>
 
-              <div className="bg-[#0b162f] border border-[#182c54] rounded-xl p-4">
-                <div className="text-xs text-slate-400">Values Altered</div>
+              <div
+                onClick={() => {
+                  if (dataDiff.modifiedCount > 0) {
+                    setDataFilter('modified');
+                  }
+                }}
+                className={`border rounded-xl p-4 transition ${
+                  dataDiff.modifiedCount > 0
+                    ? 'bg-amber-950/25 border-amber-500/50 cursor-pointer hover:bg-amber-950/40 ring-1 ring-amber-500/30'
+                    : 'bg-[#0b162f] border-[#182c54]'
+                }`}
+                title={dataDiff.modifiedCount > 0 ? 'Click to view value alert rows' : ''}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="text-xs text-slate-400">Values Altered</div>
+                  {dataDiff.modifiedCount > 0 && (
+                    <span className="text-[10px] uppercase font-bold text-amber-300 bg-amber-500/20 px-1.5 py-0.2 rounded border border-amber-500/40 flex items-center gap-1">
+                      <AlertTriangle className="w-2.5 h-2.5 text-amber-400" />
+                      <span>Alerts</span>
+                    </span>
+                  )}
+                </div>
                 <div className="text-2xl font-bold font-mono text-amber-400 mt-1">
                   {dataDiff.modifiedCount}
                 </div>
@@ -661,11 +738,25 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
                     <tr>
                       <th className="py-2.5 px-4 font-mono">Key ({effectiveKeyLabel})</th>
                       <th className="py-2.5 px-4">Status</th>
-                      {commonColumns.map((col) => (
-                        <th key={col} className="py-2.5 px-4 font-mono truncate max-w-[200px]">
-                          {col}
-                        </th>
-                      ))}
+                      {commonColumns.map((col) => {
+                        const diffCount = dataDiff?.columnDiscrepancies?.[col] || 0;
+                        return (
+                          <th key={col} className="py-2.5 px-4 font-mono max-w-[240px]">
+                            <div className="flex items-center gap-1.5">
+                              <span className="truncate">{col}</span>
+                              {diffCount > 0 && (
+                                <span
+                                  className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 font-sans shrink-0"
+                                  title={`${diffCount} value discrepancy alert(s) in ${col}`}
+                                >
+                                  <AlertTriangle className="w-2.5 h-2.5" />
+                                  <span>{diffCount}</span>
+                                </span>
+                              )}
+                            </div>
+                          </th>
+                        );
+                      })}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#142342] font-mono">
@@ -679,7 +770,7 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
                           key={idx}
                           className={`hover:bg-[#0f1d3a] transition-colors ${
                             isMod
-                              ? 'bg-amber-950/20'
+                              ? 'bg-amber-950/25 border-l-2 border-l-amber-500'
                               : isOnlyA
                               ? 'bg-blue-950/20'
                               : isOnlyB
@@ -703,8 +794,11 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
                           </td>
                           <td className="py-2.5 px-4">
                             {isMod ? (
-                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-800">
-                                Modified ({row.changedColumns?.length} cells)
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold bg-amber-950/90 text-amber-300 border border-amber-500/60 shadow-xs">
+                                <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
+                                <span>
+                                  Value Alert ({row.changedColumns?.length} {row.changedColumns?.length === 1 ? 'cell' : 'cells'})
+                                </span>
                               </span>
                             ) : isOnlyA ? (
                               <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-950 text-blue-300 border border-blue-800">
@@ -727,18 +821,66 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
                             const isChanged = row.changedColumns?.includes(col);
 
                             return (
-                              <td key={col} className="py-2 px-4 max-w-[240px] truncate">
-                                {isChanged ? (
-                                  <div className="flex flex-col gap-0.5">
-                                    <span className="text-red-400 line-through text-[11px] bg-red-950/50 px-1 rounded">
-                                      {String(valA ?? 'null')}
-                                    </span>
-                                    <span className="text-emerald-400 font-bold text-[11px] bg-emerald-950/50 px-1 rounded">
-                                      {String(valB ?? 'null')}
-                                    </span>
-                                  </div>
-                                ) : (
-                                  <span className="text-slate-300">
+                              <td key={col} className="py-2 px-4 max-w-[280px]">
+                                {isChanged ? (() => {
+                                  // Compute numeric variance if applicable (e.g. qty 700 vs 701 -> diff +1)
+                                  const numA =
+                                    valA !== null && valA !== undefined && valA !== '' && !isNaN(Number(valA))
+                                      ? Number(valA)
+                                      : null;
+                                  const numB =
+                                    valB !== null && valB !== undefined && valB !== '' && !isNaN(Number(valB))
+                                      ? Number(valB)
+                                      : null;
+                                  const isNumeric = numA !== null && numB !== null;
+                                  const delta = isNumeric ? numB - numA : null;
+                                  const deltaFormatted =
+                                    isNumeric && delta !== null
+                                      ? delta > 0
+                                        ? `+${Number(delta.toFixed(4))}`
+                                        : `${Number(delta.toFixed(4))}`
+                                      : null;
+
+                                  return (
+                                    <div className="flex flex-col gap-1 p-1.5 rounded-lg bg-amber-950/40 border border-amber-500/40 shadow-xs">
+                                      <div className="flex items-center justify-between gap-1.5">
+                                        <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-amber-400 bg-amber-900/60 px-1 py-0.2 rounded border border-amber-600/40">
+                                          <AlertTriangle className="w-2.5 h-2.5 text-amber-400" />
+                                          <span>Alert</span>
+                                        </span>
+                                        {isNumeric && delta !== 0 && (
+                                          <span
+                                            className={`text-[10px] font-mono font-bold px-1.5 py-0.2 rounded ${
+                                              delta! > 0
+                                                ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/50'
+                                                : 'bg-rose-950 text-rose-300 border border-rose-500/50'
+                                            }`}
+                                            title={`Variance (Target B - Source A): ${deltaFormatted}`}
+                                          >
+                                            Δ {deltaFormatted}
+                                          </span>
+                                        )}
+                                      </div>
+
+                                      <div className="flex items-center gap-1.5 text-xs font-mono font-semibold">
+                                        <span
+                                          className="text-red-400 line-through bg-red-950/70 px-1.5 py-0.5 rounded border border-red-900/60 truncate max-w-[110px]"
+                                          title={`Source (${tableA?.name}): ${String(valA ?? 'null')}`}
+                                        >
+                                          {String(valA ?? 'null')}
+                                        </span>
+                                        <ArrowRight className="w-3 h-3 text-amber-400 shrink-0" />
+                                        <span
+                                          className="text-emerald-300 font-bold bg-emerald-950/70 px-1.5 py-0.5 rounded border border-emerald-800/60 truncate max-w-[110px]"
+                                          title={`Target (${tableB?.name}): ${String(valB ?? 'null')}`}
+                                        >
+                                          {String(valB ?? 'null')}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  );
+                                })() : (
+                                  <span className="text-slate-300 font-mono truncate block">
                                     {String(valA ?? valB ?? 'null')}
                                   </span>
                                 )}

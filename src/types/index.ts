@@ -171,6 +171,7 @@ export interface DataDiffResult {
   matchPercentage: number;
   diffRows: DataDiffRow[];
   reconciliationSql: string;
+  columnDiscrepancies?: Record<string, number>;
 }
 
 // ==========================================
