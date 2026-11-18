@@ -8,64 +8,182 @@ import {
   AggregateDiffResult,
   AggregateDiffRow,
   AggregateFunction,
+  ColumnMapping,
+  KeyPair,
 } from '../types';
 
 /**
- * Compares the schema definitions of two tables or sheets.
+ * Auto-detects exact case-insensitive column matches between Table A and Table B.
  */
-export function compareSchemas(tableA: TableSchema, tableB: TableSchema): SchemaDiffResult {
+export function autoDetectColumnMappings(tableA: TableSchema, tableB: TableSchema): ColumnMapping[] {
+  const mapB = new Map(tableB.columns.map((c) => [c.name.toLowerCase(), c.name]));
+  const mappings: ColumnMapping[] = [];
+
+  tableA.columns.forEach((cA) => {
+    const matchedB = mapB.get(cA.name.toLowerCase());
+    if (matchedB) {
+      mappings.push({
+        colA: cA.name,
+        colB: matchedB,
+        isAutoMatched: true,
+      });
+    }
+  });
+
+  return mappings;
+}
+
+/**
+ * Suggests fuzzy or abbreviation-based pairings for unmapped columns
+ * (e.g. 'actual' ↔ 'act', 'material_desc' ↔ 'material_description', 'qty' ↔ 'quantity').
+ */
+export function suggestFuzzyColumnMappings(
+  tableA: TableSchema,
+  tableB: TableSchema,
+  existingMappings: ColumnMapping[] = []
+): ColumnMapping[] {
+  const mappedColsA = new Set(existingMappings.map((m) => m.colA.toLowerCase()));
+  const mappedColsB = new Set(existingMappings.map((m) => m.colB.toLowerCase()));
+
+  const unmappedA = tableA.columns.filter((c) => !mappedColsA.has(c.name.toLowerCase()));
+  const unmappedB = tableB.columns.filter((c) => !mappedColsB.has(c.name.toLowerCase()));
+
+  const normalize = (name: string): string => {
+    return name
+      .toLowerCase()
+      .replace(/[\s_\-.]+/g, '')
+      .replace(/description/g, 'desc')
+      .replace(/actual/g, 'act')
+      .replace(/quantity/g, 'qty')
+      .replace(/amount/g, 'amt')
+      .replace(/number/g, 'num')
+      .replace(/customer/g, 'cust')
+      .replace(/date/g, 'dt')
+      .replace(/identifier/g, 'id');
+  };
+
+  const suggestions: ColumnMapping[] = [];
+  const usedB = new Set<string>();
+
+  unmappedA.forEach((colA) => {
+    const normA = normalize(colA.name);
+    for (const colB of unmappedB) {
+      if (usedB.has(colB.name.toLowerCase())) continue;
+      const normB = normalize(colB.name);
+
+      const isMatch =
+        normA === normB ||
+        (normA.length > 2 && normB.length > 2 && (normA.startsWith(normB) || normB.startsWith(normA))) ||
+        (normA.length > 3 && normB.length > 3 && (normA.includes(normB) || normB.includes(normA)));
+
+      if (isMatch) {
+        suggestions.push({
+          colA: colA.name,
+          colB: colB.name,
+          isAutoMatched: false,
+        });
+        usedB.add(colB.name.toLowerCase());
+        break;
+      }
+    }
+  });
+
+  return suggestions;
+}
+
+/**
+ * Compares the schema definitions of two tables or sheets, optionally taking into account
+ * manual column pairings (e.g. actual ↔ act, material_desc ↔ material_description).
+ */
+export function compareSchemas(
+  tableA: TableSchema,
+  tableB: TableSchema,
+  columnMappings?: ColumnMapping[]
+): SchemaDiffResult {
   const mapA = new Map(tableA.columns.map((c) => [c.name.toLowerCase(), c]));
   const mapB = new Map(tableB.columns.map((c) => [c.name.toLowerCase(), c]));
 
-  const allColNames = Array.from(new Set([...mapA.keys(), ...mapB.keys()]));
+  const mappings =
+    columnMappings && columnMappings.length > 0
+      ? columnMappings
+      : autoDetectColumnMappings(tableA, tableB);
+
   const columns: SchemaDiffColumn[] = [];
   const onlyInA: string[] = [];
   const onlyInB: string[] = [];
   const typeMismatches: { column: string; typeA: DataType; typeB: DataType }[] = [];
 
   let matchScore = 0;
+  const processedA = new Set<string>();
+  const processedB = new Set<string>();
 
-  allColNames.forEach((colKey) => {
-    const colA = mapA.get(colKey);
-    const colB = mapB.get(colKey);
+  // Process mapped pairs first
+  mappings.forEach((m) => {
+    const colA = mapA.get(m.colA.toLowerCase());
+    const colB = mapB.get(m.colB.toLowerCase());
+    if (colA && colB) {
+      processedA.add(colA.name.toLowerCase());
+      processedB.add(colB.name.toLowerCase());
+      const pairLabel = colA.name === colB.name ? colA.name : `${colA.name} ↔ ${colB.name}`;
 
-    const inA = !!colA;
-    const inB = !!colB;
-    const name = colA?.name || colB?.name || colKey;
-
-    if (inA && inB) {
-      const typeMatches = colA!.type === colB!.type;
+      const typeMatches = colA.type === colB.type;
       if (!typeMatches) {
         typeMismatches.push({
-          column: name,
-          typeA: colA!.type,
-          typeB: colB!.type,
+          column: pairLabel,
+          typeA: colA.type,
+          typeB: colB.type,
         });
-        matchScore += 0.5; // partial credit for name match with type mismatch
+        matchScore += 0.5;
       } else {
         matchScore += 1;
       }
-    } else if (inA && !inB) {
-      onlyInA.push(name);
-    } else if (!inA && inB) {
-      onlyInB.push(name);
-    }
 
-    columns.push({
-      name,
-      inTableA: inA,
-      inTableB: inB,
-      typeA: colA?.type,
-      typeB: colB?.type,
-      nullCountA: colA?.nullCount,
-      nullCountB: colB?.nullCount,
-      distinctA: colA?.distinctCount,
-      distinctB: colB?.distinctCount,
-    });
+      columns.push({
+        name: pairLabel,
+        inTableA: true,
+        inTableB: true,
+        typeA: colA.type,
+        typeB: colB.type,
+        nullCountA: colA.nullCount,
+        nullCountB: colB.nullCount,
+        distinctA: colA.distinctCount,
+        distinctB: colB.distinctCount,
+      });
+    }
   });
 
-  const maxPossible = allColNames.length || 1;
-  const matchRate = Math.round((matchScore / maxPossible) * 100);
+  // Remaining unmapped columns in Table A
+  tableA.columns.forEach((colA) => {
+    if (!processedA.has(colA.name.toLowerCase())) {
+      onlyInA.push(colA.name);
+      columns.push({
+        name: colA.name,
+        inTableA: true,
+        inTableB: false,
+        typeA: colA.type,
+        nullCountA: colA.nullCount,
+        distinctA: colA.distinctCount,
+      });
+    }
+  });
+
+  // Remaining unmapped columns in Table B
+  tableB.columns.forEach((colB) => {
+    if (!processedB.has(colB.name.toLowerCase())) {
+      onlyInB.push(colB.name);
+      columns.push({
+        name: colB.name,
+        inTableA: false,
+        inTableB: true,
+        typeB: colB.type,
+        nullCountB: colB.nullCount,
+        distinctB: colB.distinctCount,
+      });
+    }
+  });
+
+  const totalSlots = mappings.length + onlyInA.length + onlyInB.length || 1;
+  const matchRate = Math.round((matchScore / totalSlots) * 100);
 
   return {
     tableAName: tableA.name,
@@ -81,67 +199,99 @@ export function compareSchemas(tableA: TableSchema, tableB: TableSchema): Schema
 /**
  * Automatically chooses the best candidate key column to join/compare data rows.
  */
-export function autoDetectKeyColumn(tableA: TableSchema, tableB: TableSchema): string {
-  const commonCols = tableA.columns.filter((cA) =>
-    tableB.columns.some((cB) => cB.name.toLowerCase() === cA.name.toLowerCase())
-  );
+export function autoDetectKeyColumn(
+  tableA: TableSchema,
+  tableB: TableSchema,
+  columnMappings?: ColumnMapping[]
+): string {
+  const mappings =
+    columnMappings && columnMappings.length > 0
+      ? columnMappings
+      : autoDetectColumnMappings(tableA, tableB);
 
-  if (commonCols.length === 0) {
+  const mappedNamesA = mappings.map((m) => m.colA);
+
+  if (mappedNamesA.length === 0) {
     return tableA.columns[0]?.name || '';
   }
 
-  // Priority 1: High distinct count column with 'id', 'no', 'code', 'key'
-  const keyCandidate = commonCols.find((c) => {
-    const lower = c.name.toLowerCase();
-    return (
-      (lower.includes('id') || lower.includes('no') || lower.includes('code') || lower.includes('key')) &&
-      c.distinctCount > 0
-    );
+  // Priority 1: Column with 'id', 'no', 'code', 'key'
+  const keyCandidate = mappedNamesA.find((name) => {
+    const lower = name.toLowerCase();
+    return lower.includes('id') || lower.includes('no') || lower.includes('code') || lower.includes('key');
   });
-  if (keyCandidate) return keyCandidate.name;
+  if (keyCandidate) return keyCandidate;
 
-  // Priority 2: Highest distinct count common column
-  const sorted = [...commonCols].sort((a, b) => b.distinctCount - a.distinctCount);
-  return sorted[0].name;
+  // Priority 2: Return first mapped column
+  return mappedNamesA[0];
 }
 
 /**
  * Compares data records row-by-row and cell-by-cell between two tables.
- */
-/**
- * Compares data records row-by-row and cell-by-cell between two tables.
- * Supports single or multi-column (composite) identity keys (e.g. ['customer', 'order_date']).
+ * Supports manual column pairings (e.g. 'actual' ↔ 'act', 'material_desc' ↔ 'material_description')
+ * and single or multi-column (composite) identity keys.
  */
 export function compareData(
   tableA: TableSchema,
   dataA: Record<string, any>[],
   tableB: TableSchema,
   dataB: Record<string, any>[],
-  keyColumn?: string | string[]
+  keyColumn?: string | string[] | KeyPair[],
+  columnMappings?: ColumnMapping[]
 ): DataDiffResult {
-  // Normalize key columns to an array of valid strings
-  let keys: string[] = [];
+  const effectiveMappings: ColumnMapping[] =
+    columnMappings && columnMappings.length > 0
+      ? columnMappings
+      : autoDetectColumnMappings(tableA, tableB);
+
+  // Normalize key columns to key pairs
+  let keyPairs: KeyPair[] = [];
   if (Array.isArray(keyColumn)) {
-    keys = keyColumn.map((k) => String(k).trim()).filter(Boolean);
+    keyColumn.forEach((item) => {
+      if (typeof item === 'object' && item !== null && 'colA' in item && 'colB' in item) {
+        keyPairs.push(item as KeyPair);
+      } else if (typeof item === 'string') {
+        const k = item.trim();
+        if (k) {
+          const mapped = effectiveMappings.find(
+            (m) => m.colA.toLowerCase() === k.toLowerCase() || m.colB.toLowerCase() === k.toLowerCase()
+          );
+          if (mapped) {
+            keyPairs.push({ colA: mapped.colA, colB: mapped.colB });
+          } else {
+            keyPairs.push({ colA: k, colB: k });
+          }
+        }
+      }
+    });
   } else if (typeof keyColumn === 'string' && keyColumn.trim()) {
-    // Support comma or plus separated e.g. "customer, order_date" or "customer + order_date"
-    keys = keyColumn
+    const rawKeys = keyColumn
       .split(/[,+]/)
       .map((k) => k.trim())
       .filter(Boolean);
+    rawKeys.forEach((k) => {
+      const mapped = effectiveMappings.find(
+        (m) => m.colA.toLowerCase() === k.toLowerCase() || m.colB.toLowerCase() === k.toLowerCase()
+      );
+      if (mapped) {
+        keyPairs.push({ colA: mapped.colA, colB: mapped.colB });
+      } else {
+        keyPairs.push({ colA: k, colB: k });
+      }
+    });
   }
 
-  if (keys.length === 0) {
-    const auto = autoDetectKeyColumn(tableA, tableB);
-    if (auto) keys = [auto];
+  if (keyPairs.length === 0) {
+    const auto = autoDetectKeyColumn(tableA, tableB, effectiveMappings);
+    if (auto) {
+      const mapped = effectiveMappings.find((m) => m.colA.toLowerCase() === auto.toLowerCase());
+      if (mapped) {
+        keyPairs.push({ colA: mapped.colA, colB: mapped.colB });
+      } else {
+        keyPairs.push({ colA: auto, colB: auto });
+      }
+    }
   }
-
-  // Common columns
-  const commonCols = tableA.columns
-    .map((c) => c.name)
-    .filter((colName) =>
-      tableB.columns.some((cB) => cB.name.toLowerCase() === colName.toLowerCase())
-    );
 
   const diffRows: DataDiffRow[] = [];
   const columnDiscrepancies: Record<string, number> = {};
@@ -150,7 +300,7 @@ export function compareData(
   let onlyInACount = 0;
   let onlyInBCount = 0;
 
-  if (keys.length === 0) {
+  if (keyPairs.length === 0) {
     // If no key exists, compare by row index
     const maxRows = Math.max(dataA.length, dataB.length);
     for (let i = 0; i < maxRows; i++) {
@@ -173,12 +323,13 @@ export function compareData(
         });
       } else {
         const changedCols: string[] = [];
-        commonCols.forEach((col) => {
-          const valA = rowA[col];
-          const valB = rowB[col];
+        effectiveMappings.forEach((pair) => {
+          const valA = rowA[pair.colA];
+          const valB = rowB[pair.colB];
+          const pairKey = pair.colA === pair.colB ? pair.colA : `${pair.colA} ↔ ${pair.colB}`;
           if (String(valA ?? '') !== String(valB ?? '')) {
-            changedCols.push(col);
-            columnDiscrepancies[col] = (columnDiscrepancies[col] || 0) + 1;
+            changedCols.push(pairKey);
+            columnDiscrepancies[pairKey] = (columnDiscrepancies[pairKey] || 0) + 1;
           }
         });
 
@@ -204,27 +355,34 @@ export function compareData(
     }
   } else {
     // Build helper to generate composite row key
-    const buildRowKey = (row: Record<string, any>, idx: number): string => {
-      const parts = keys.map((k) => {
-        const val = row[k];
+    const buildRowKeyA = (row: Record<string, any>, idx: number): string => {
+      const parts = keyPairs.map((kp) => {
+        const val = row[kp.colA];
         return val !== null && val !== undefined ? String(val).trim() : '';
       });
-      if (parts.every((p) => p === '')) {
-        return `_row_${idx}`;
-      }
+      if (parts.every((p) => p === '')) return `_row_${idx}`;
+      return parts.join(' | ');
+    };
+
+    const buildRowKeyB = (row: Record<string, any>, idx: number): string => {
+      const parts = keyPairs.map((kp) => {
+        const val = row[kp.colB];
+        return val !== null && val !== undefined ? String(val).trim() : '';
+      });
+      if (parts.every((p) => p === '')) return `_row_${idx}`;
       return parts.join(' | ');
     };
 
     // Compare indexed by composite key
     const mapA = new Map<string, Record<string, any>>();
     dataA.forEach((row, idx) => {
-      const k = buildRowKey(row, idx);
+      const k = buildRowKeyA(row, idx);
       mapA.set(k, row);
     });
 
     const mapB = new Map<string, Record<string, any>>();
     dataB.forEach((row, idx) => {
-      const k = buildRowKey(row, idx);
+      const k = buildRowKeyB(row, idx);
       mapB.set(k, row);
     });
 
@@ -250,15 +408,16 @@ export function compareData(
         });
       } else if (rowA && rowB) {
         const changedCols: string[] = [];
-        commonCols.forEach((col) => {
-          const valA = rowA[col];
-          const valB = rowB[col];
+        effectiveMappings.forEach((pair) => {
+          const valA = rowA[pair.colA];
+          const valB = rowB[pair.colB];
           const strA = valA !== null && valA !== undefined ? String(valA).trim() : '';
           const strB = valB !== null && valB !== undefined ? String(valB).trim() : '';
+          const pairKey = pair.colA === pair.colB ? pair.colA : `${pair.colA} ↔ ${pair.colB}`;
 
           if (strA !== strB) {
-            changedCols.push(col);
-            columnDiscrepancies[col] = (columnDiscrepancies[col] || 0) + 1;
+            changedCols.push(pairKey);
+            columnDiscrepancies[pairKey] = (columnDiscrepancies[pairKey] || 0) + 1;
           }
         });
 
@@ -289,33 +448,48 @@ export function compareData(
     ((identicalCount * 2) / totalCompared) * 100
   );
 
-  // Generate reconciliation SQL
-  const keyLabel = keys.join(' + ');
-  const nonKeyCols = commonCols.filter((c) => !keys.includes(c));
-  const commonJoinCols = nonKeyCols.map((c) => `a.${c} AS a_${c}, b.${c} AS b_${c}`).join(', ');
+  // Generate reconciliation SQL using mapped pairs
+  const keyLabel = keyPairs
+    .map((kp) => (kp.colA === kp.colB ? kp.colA : `${kp.colA} ↔ ${kp.colB}`))
+    .join(' + ');
 
-  const diffKeySelect = keys.length > 0
-    ? keys.map((k) => `COALESCE(a.${k}, b.${k}) AS diff_${k}`).join(',\n  ')
-    : 'COALESCE(a.id, b.id) AS diff_key';
+  const nonKeyMappings = effectiveMappings.filter(
+    (m) => !keyPairs.some((kp) => kp.colA === m.colA && kp.colB === m.colB)
+  );
 
-  const onClause = keys.length > 0
-    ? keys.map((k) => `a.${k} = b.${k}`).join('\n AND ')
-    : 'a.id = b.id';
+  const commonJoinCols = nonKeyMappings
+    .map((m) => `a.${m.colA} AS a_${m.colA}, b.${m.colB} AS b_${m.colB}`)
+    .join(', ');
 
-  const caseAddedCondition = keys.length > 0
-    ? keys.map((k) => `a.${k} IS NULL`).join(' OR ')
-    : 'a.id IS NULL';
+  const diffKeySelect =
+    keyPairs.length > 0
+      ? keyPairs
+          .map((kp) => `COALESCE(a.${kp.colA}, b.${kp.colB}) AS diff_${kp.colA}`)
+          .join(',\n  ')
+      : 'COALESCE(a.id, b.id) AS diff_key';
 
-  const caseRemovedCondition = keys.length > 0
-    ? keys.map((k) => `b.${k} IS NULL`).join(' OR ')
-    : 'b.id IS NULL';
+  const onClause =
+    keyPairs.length > 0
+      ? keyPairs.map((kp) => `a.${kp.colA} = b.${kp.colB}`).join('\n AND ')
+      : 'a.id = b.id';
 
-  const whereNullClause = keys.length > 0
-    ? keys.map((k) => `a.${k} IS NULL\n    OR b.${k} IS NULL`).join('\n    OR ')
-    : 'a.id IS NULL OR b.id IS NULL';
+  const caseAddedCondition =
+    keyPairs.length > 0
+      ? keyPairs.map((kp) => `a.${kp.colA} IS NULL`).join(' OR ')
+      : 'a.id IS NULL';
+
+  const caseRemovedCondition =
+    keyPairs.length > 0
+      ? keyPairs.map((kp) => `b.${kp.colB} IS NULL`).join(' OR ')
+      : 'b.id IS NULL';
+
+  const whereNullClause =
+    keyPairs.length > 0
+      ? keyPairs.map((kp) => `a.${kp.colA} IS NULL\n    OR b.${kp.colB} IS NULL`).join('\n    OR ')
+      : 'a.id IS NULL OR b.id IS NULL';
 
   const whereMismatchClause =
-    nonKeyCols.slice(0, 3).map((c) => `a.${c} <> b.${c}`).join(' OR ') || 'FALSE';
+    nonKeyMappings.slice(0, 3).map((m) => `a.${m.colA} <> b.${m.colB}`).join(' OR ') || 'FALSE';
 
   const reconciliationSql = `/* Reconciliation Query: ${tableA.name} vs ${tableB.name} */
 /* Join Identity: ${keyLabel || 'Row Index'} */
@@ -337,7 +511,9 @@ LIMIT 100;`;
     tableAName: tableA.name,
     tableBName: tableB.name,
     keyColumn: keyLabel,
-    keyColumns: keys,
+    keyColumns: keyPairs.map((kp) => kp.colA),
+    keyPairs,
+    columnMappings: effectiveMappings,
     totalRowsA: dataA.length,
     totalRowsB: dataB.length,
     identicalCount,
@@ -354,31 +530,78 @@ LIMIT 100;`;
 /**
  * Generates an ANSI / AlaSQL compatible aggregate reconciliation query
  * grouping by dimensions and comparing measure metrics with discrepancy alerts.
+ * Supports manual dimension and measure column pairings.
  */
 export function generateAggregateReconciliationSql(
   tableAName: string,
   tableBName: string,
-  dimensions: string[],
-  measureCol: string,
+  dimensions: (string | KeyPair)[],
+  measureCol: string | KeyPair,
   measureAgg: AggregateFunction = 'SUM',
-  tolerance: number = 0
+  tolerance: number = 0,
+  columnMappings?: ColumnMapping[]
 ): string {
-  const isAllRows = dimensions.length === 0;
-  const dimLabels = isAllRows ? 'All Records (Grand Total)' : dimensions.join(', ');
-  const aggExpr =
-    measureAgg === 'COUNT'
-      ? measureCol === '*'
-        ? 'COUNT(*)'
-        : `COUNT(${measureCol})`
-      : `${measureAgg}(${measureCol})`;
+  const effectiveMappings = columnMappings || [];
 
-  const colA = `${tableAName}_${measureCol === '*' ? 'rows' : measureCol.toLowerCase()}_${measureAgg.toLowerCase()}`;
-  const colB = `${tableBName}_${measureCol === '*' ? 'rows' : measureCol.toLowerCase()}_${measureAgg.toLowerCase()}`;
+  // Normalize dimension pairs
+  const dimPairs: KeyPair[] = [];
+  dimensions.forEach((item) => {
+    if (typeof item === 'object' && item !== null && 'colA' in item && 'colB' in item) {
+      dimPairs.push(item as KeyPair);
+    } else if (typeof item === 'string' && item.trim()) {
+      const d = item.trim();
+      const mapped = effectiveMappings.find((m) => m.colA.toLowerCase() === d.toLowerCase());
+      if (mapped) {
+        dimPairs.push({ colA: mapped.colA, colB: mapped.colB });
+      } else {
+        dimPairs.push({ colA: d, colB: d });
+      }
+    }
+  });
+
+  // Normalize measure pair
+  let mPair: KeyPair;
+  if (typeof measureCol === 'object' && measureCol !== null && 'colA' in measureCol && 'colB' in measureCol) {
+    mPair = measureCol as KeyPair;
+  } else if (typeof measureCol === 'string' && measureCol === '*') {
+    mPair = { colA: '*', colB: '*' };
+  } else if (typeof measureCol === 'string') {
+    const mapped = effectiveMappings.find((m) => m.colA.toLowerCase() === measureCol.toLowerCase());
+    if (mapped) {
+      mPair = { colA: mapped.colA, colB: mapped.colB };
+    } else {
+      mPair = { colA: measureCol, colB: measureCol };
+    }
+  } else {
+    mPair = { colA: '*', colB: '*' };
+  }
+
+  const isAllRows = dimPairs.length === 0;
+  const dimLabels = isAllRows
+    ? 'All Records (Grand Total)'
+    : dimPairs.map((dp) => (dp.colA === dp.colB ? dp.colA : `${dp.colA} ↔ ${dp.colB}`)).join(', ');
+
+  const aggExprA =
+    measureAgg === 'COUNT'
+      ? mPair.colA === '*'
+        ? 'COUNT(*)'
+        : `COUNT(${mPair.colA})`
+      : `${measureAgg}(${mPair.colA})`;
+
+  const aggExprB =
+    measureAgg === 'COUNT'
+      ? mPair.colB === '*'
+        ? 'COUNT(*)'
+        : `COUNT(${mPair.colB})`
+      : `${measureAgg}(${mPair.colB})`;
+
+  const colA = `${tableAName}_${mPair.colA === '*' ? 'rows' : mPair.colA.toLowerCase()}_${measureAgg.toLowerCase()}`;
+  const colB = `${tableBName}_${mPair.colB === '*' ? 'rows' : mPair.colB.toLowerCase()}_${measureAgg.toLowerCase()}`;
 
   if (isAllRows) {
     return `/* ==================================================================== */
 /* AGGREGATE SUMMARY RECONCILIATION: ${tableAName} vs ${tableBName} */
-/* Scope: Overall Totals | Metric: ${aggExpr} */
+/* Scope: Overall Totals | Metric: ${aggExprA} vs ${aggExprB} */
 /* ==================================================================== */
 SELECT
   a.agg_val AS ${colA},
@@ -391,25 +614,28 @@ SELECT
   a.row_count AS ${tableAName}_row_count,
   b.row_count AS ${tableBName}_row_count
 FROM (
-  SELECT 1 AS join_id, ${aggExpr} AS agg_val, COUNT(*) AS row_count
+  SELECT 1 AS join_id, ${aggExprA} AS agg_val, COUNT(*) AS row_count
   FROM ${tableAName}
 ) a
 JOIN (
-  SELECT 1 AS join_id, ${aggExpr} AS agg_val, COUNT(*) AS row_count
+  SELECT 1 AS join_id, ${aggExprB} AS agg_val, COUNT(*) AS row_count
   FROM ${tableBName}
 ) b
   ON a.join_id = b.join_id;`;
   }
 
-  const dimSelect = dimensions.map((d) => `COALESCE(a.${d}, b.${d}) AS ${d}`).join(',\n  ');
-  const dimSubSelectA = dimensions.map((d) => `${d}`).join(', ');
-  const dimSubSelectB = dimensions.map((d) => `${d}`).join(', ');
-  const joinClause = dimensions.map((d) => `a.${d} = b.${d}`).join('\n AND ');
-  const groupBy = dimensions.join(', ');
+  const dimSelect = dimPairs
+    .map((dp) => `COALESCE(a.${dp.colA}, b.${dp.colB}) AS ${dp.colA === dp.colB ? dp.colA : `${dp.colA}_${dp.colB}`}`)
+    .join(',\n  ');
+  const dimSubSelectA = dimPairs.map((dp) => dp.colA).join(', ');
+  const dimSubSelectB = dimPairs.map((dp) => dp.colB).join(', ');
+  const joinClause = dimPairs.map((dp) => `a.${dp.colA} = b.${dp.colB}`).join('\n AND ');
+  const groupByA = dimPairs.map((dp) => dp.colA).join(', ');
+  const groupByB = dimPairs.map((dp) => dp.colB).join(', ');
 
   return `/* ==================================================================== */
 /* AGGREGATE SUMMARY RECONCILIATION: ${tableAName} vs ${tableBName} */
-/* Group By: ${dimLabels} | Metric: ${aggExpr} */
+/* Group By: ${dimLabels} | Metric: ${aggExprA} vs ${aggExprB} */
 /* ==================================================================== */
 SELECT
   ${dimSelect},
@@ -427,18 +653,18 @@ SELECT
 FROM (
   SELECT
     ${dimSubSelectA},
-    ${aggExpr} AS agg_val,
+    ${aggExprA} AS agg_val,
     COUNT(*) AS row_count
   FROM ${tableAName}
-  GROUP BY ${groupBy}
+  GROUP BY ${groupByA}
 ) a
 FULL OUTER JOIN (
   SELECT
     ${dimSubSelectB},
-    ${aggExpr} AS agg_val,
+    ${aggExprB} AS agg_val,
     COUNT(*) AS row_count
   FROM ${tableBName}
-  GROUP BY ${groupBy}
+  GROUP BY ${groupByB}
 ) b
   ON ${joinClause}
 ORDER BY
@@ -464,36 +690,94 @@ interface GroupAcc {
  * Compares two datasets by grouping rows along one or more dimensions
  * and evaluating aggregate measures (SUM, COUNT, AVG, MIN, MAX).
  * Flags value variances, computes deltas (Δ) and percentage changes.
+ * Supports manual dimension pairings (e.g. material_desc ↔ material_description)
+ * and measure pairings (e.g. actual ↔ act).
  */
 export function compareAggregateData(
   tableA: TableSchema,
   dataA: Record<string, any>[],
   tableB: TableSchema,
   dataB: Record<string, any>[],
-  dimensions: string[],
-  measureCol: string,
+  dimensions: (string | KeyPair)[],
+  measureCol: string | KeyPair,
   measureAgg: AggregateFunction = 'SUM',
-  tolerance: number = 0
+  tolerance: number = 0,
+  columnMappings?: ColumnMapping[]
 ): AggregateDiffResult {
-  const buildGroupKey = (row: Record<string, any>): { key: string; values: Record<string, any> } => {
-    if (dimensions.length === 0) {
+  const effectiveMappings = columnMappings || [];
+
+  // Normalize dimension pairs
+  const dimPairs: KeyPair[] = [];
+  dimensions.forEach((item) => {
+    if (typeof item === 'object' && item !== null && 'colA' in item && 'colB' in item) {
+      dimPairs.push(item as KeyPair);
+    } else if (typeof item === 'string' && item.trim()) {
+      const d = item.trim();
+      const mapped = effectiveMappings.find((m) => m.colA.toLowerCase() === d.toLowerCase());
+      if (mapped) {
+        dimPairs.push({ colA: mapped.colA, colB: mapped.colB });
+      } else {
+        dimPairs.push({ colA: d, colB: d });
+      }
+    }
+  });
+
+  // Normalize measure pair
+  let mPair: KeyPair;
+  if (typeof measureCol === 'object' && measureCol !== null && 'colA' in measureCol && 'colB' in measureCol) {
+    mPair = measureCol as KeyPair;
+  } else if (typeof measureCol === 'string' && measureCol === '*') {
+    mPair = { colA: '*', colB: '*' };
+  } else if (typeof measureCol === 'string') {
+    const mapped = effectiveMappings.find((m) => m.colA.toLowerCase() === measureCol.toLowerCase());
+    if (mapped) {
+      mPair = { colA: mapped.colA, colB: mapped.colB };
+    } else {
+      mPair = { colA: measureCol, colB: measureCol };
+    }
+  } else {
+    mPair = { colA: '*', colB: '*' };
+  }
+
+  const buildGroupKeyA = (row: Record<string, any>): { key: string; values: Record<string, any> } => {
+    if (dimPairs.length === 0) {
       return { key: 'All Records (Grand Total)', values: {} };
     }
     const values: Record<string, any> = {};
-    const parts = dimensions.map((dim) => {
-      const v = row[dim];
+    const parts = dimPairs.map((dp) => {
+      const v = row[dp.colA];
       const strVal = v !== null && v !== undefined && String(v).trim() !== '' ? String(v).trim() : '(null)';
-      values[dim] = v;
+      const label = dp.colA === dp.colB ? dp.colA : `${dp.colA} ↔ ${dp.colB}`;
+      values[label] = v;
       return strVal;
     });
     return { key: parts.join(' | '), values };
   };
 
-  const aggregateDataset = (data: Record<string, any>[]): Map<string, GroupAcc> => {
+  const buildGroupKeyB = (row: Record<string, any>): { key: string; values: Record<string, any> } => {
+    if (dimPairs.length === 0) {
+      return { key: 'All Records (Grand Total)', values: {} };
+    }
+    const values: Record<string, any> = {};
+    const parts = dimPairs.map((dp) => {
+      const v = row[dp.colB];
+      const strVal = v !== null && v !== undefined && String(v).trim() !== '' ? String(v).trim() : '(null)';
+      const label = dp.colA === dp.colB ? dp.colA : `${dp.colA} ↔ ${dp.colB}`;
+      values[label] = v;
+      return strVal;
+    });
+    return { key: parts.join(' | '), values };
+  };
+
+  const aggregateDataset = (
+    data: Record<string, any>[],
+    keyBuilder: (row: Record<string, any>) => { key: string; values: Record<string, any> },
+    measureField: string
+  ): Map<string, GroupAcc> => {
     const map = new Map<string, GroupAcc>();
 
     data.forEach((row) => {
-      const { key, values } = buildGroupKey(row);
+      const { key, values } = keyBuilder(row);
       let group = map.get(key);
       if (!group) {
         group = {
@@ -510,14 +794,16 @@ export function compareAggregateData(
 
       group.count++;
 
-      const rawVal = row[measureCol];
-      if (rawVal !== null && rawVal !== undefined && rawVal !== '') {
-        const num = Number(rawVal);
-        if (!isNaN(num)) {
-          group.sum += num;
-          group.numericCount++;
-          group.min = group.min === null ? num : Math.min(group.min, num);
-          group.max = group.max === null ? num : Math.max(group.max, num);
+      if (measureField !== '*') {
+        const rawVal = row[measureField];
+        if (rawVal !== null && rawVal !== undefined && rawVal !== '') {
+          const num = Number(rawVal);
+          if (!isNaN(num)) {
+            group.sum += num;
+            group.numericCount++;
+            group.min = group.min === null ? num : Math.min(group.min, num);
+            group.max = group.max === null ? num : Math.max(group.max, num);
+          }
         }
       }
     });
@@ -525,10 +811,10 @@ export function compareAggregateData(
     return map;
   };
 
-  const computeFinalValue = (group?: GroupAcc): number | null => {
+  const computeFinalValue = (group: GroupAcc | undefined, isStar: boolean): number | null => {
     if (!group) return null;
     if (measureAgg === 'COUNT') {
-      return measureCol === '*' ? group.count : group.numericCount;
+      return isStar ? group.count : group.numericCount;
     }
     if (group.numericCount === 0) {
       return 0;
@@ -548,8 +834,8 @@ export function compareAggregateData(
     return Number(group.sum.toFixed(4));
   };
 
-  const mapA = aggregateDataset(dataA);
-  const mapB = aggregateDataset(dataB);
+  const mapA = aggregateDataset(dataA, buildGroupKeyA, mPair.colA);
+  const mapB = aggregateDataset(dataB, buildGroupKeyB, mPair.colB);
 
   const allKeys = Array.from(new Set([...mapA.keys(), ...mapB.keys()]));
 
@@ -566,8 +852,8 @@ export function compareAggregateData(
     const grpA = mapA.get(key);
     const grpB = mapB.get(key);
 
-    const valA = computeFinalValue(grpA);
-    const valB = computeFinalValue(grpB);
+    const valA = computeFinalValue(grpA, mPair.colA === '*');
+    const valB = computeFinalValue(grpB, mPair.colB === '*');
 
     const countA = grpA ? grpA.count : 0;
     const countB = grpB ? grpB.count : 0;
@@ -680,17 +966,25 @@ export function compareAggregateData(
   const reconciliationSql = generateAggregateReconciliationSql(
     tableA.name,
     tableB.name,
-    dimensions,
-    measureCol,
+    dimPairs,
+    mPair,
     measureAgg,
-    tolerance
+    tolerance,
+    effectiveMappings
   );
+
+  const dimNames = dimPairs.map((dp) => (dp.colA === dp.colB ? dp.colA : `${dp.colA} ↔ ${dp.colB}`));
+  const measureLabel = mPair.colA === mPair.colB ? mPair.colA : `${mPair.colA} ↔ ${mPair.colB}`;
 
   return {
     tableAName: tableA.name,
     tableBName: tableB.name,
-    dimensions,
-    measureCol,
+    dimensions: dimNames,
+    dimensionPairs: dimPairs,
+    measureCol: measureLabel,
+    measureColA: mPair.colA,
+    measureColB: mPair.colB,
+    measurePair: mPair,
     measureAgg,
     tolerance,
     rows,

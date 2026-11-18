@@ -22,13 +22,20 @@ import {
   Calculator,
   Download,
   Sliders,
+  Sparkles,
+  Wand2,
+  Link2,
+  Unlink,
+  RefreshCw,
 } from 'lucide-react';
-import { TableSchema, AggregateFunction } from '../types';
+import { TableSchema, AggregateFunction, ColumnMapping, KeyPair } from '../types';
 import {
   compareSchemas,
   compareData,
   autoDetectKeyColumn,
   compareAggregateData,
+  autoDetectColumnMappings,
+  suggestFuzzyColumnMappings,
 } from '../utils/schemaComparator';
 import { highlightSql } from '../utils/sqlHighlighter';
 import { useTheme } from '../context/ThemeContext';
@@ -67,6 +74,12 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
   const [copiedAggSql, setCopiedAggSql] = useState(false);
   const [searchFilter, setSearchFilter] = useState('');
 
+  // Column Mapping & Synonym State
+  const [customColumnMappings, setCustomColumnMappings] = useState<ColumnMapping[]>([]);
+  const [isMappingPanelOpen, setIsMappingPanelOpen] = useState<boolean>(false);
+  const [newMapColA, setNewMapColA] = useState<string>('');
+  const [newMapColB, setNewMapColB] = useState<string>('');
+
   // Aggregate Summary State
   const [customAggDimensions, setCustomAggDimensions] = useState<string[]>([]);
   const [aggMeasure, setAggMeasure] = useState<string>('');
@@ -86,6 +99,16 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
     }
   }, [tables, selectedTableAName, selectedTableBName]);
 
+  // Reset mappings and selections when switching tables
+  React.useEffect(() => {
+    setCustomColumnMappings([]);
+    setCustomKeyCols([]);
+    setCustomAggDimensions([]);
+    setAggMeasure('');
+    setNewMapColA('');
+    setNewMapColB('');
+  }, [selectedTableAName, selectedTableBName]);
+
   const tableA = useMemo(() => tables.find((t) => t.name === selectedTableAName), [tables, selectedTableAName]);
   const tableB = useMemo(() => tables.find((t) => t.name === selectedTableBName), [tables, selectedTableBName]);
 
@@ -100,42 +123,124 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
     return (window as any).alasql?.tables?.[tableB.name]?.data || tableB.previewRows || [];
   }, [tableB]);
 
-  // Schema diff result
+  // Default exact column name mappings
+  const defaultMappings = useMemo(() => {
+    if (!tableA || !tableB) return [];
+    return autoDetectColumnMappings(tableA, tableB);
+  }, [tableA, tableB]);
+
+  // Active mappings (user custom mappings override defaults if present)
+  const activeMappings = useMemo(() => {
+    if (customColumnMappings.length > 0) {
+      return customColumnMappings;
+    }
+    return defaultMappings;
+  }, [customColumnMappings, defaultMappings]);
+
+  // Number of custom synonym pairings where names differ (e.g. actual ↔ act)
+  const synonymCount = useMemo(() => {
+    return activeMappings.filter((m) => m.colA.toLowerCase() !== m.colB.toLowerCase()).length;
+  }, [activeMappings]);
+
+  // Fuzzy suggestions for columns that are not yet paired
+  const fuzzySuggestions = useMemo(() => {
+    if (!tableA || !tableB) return [];
+    return suggestFuzzyColumnMappings(tableA, tableB, activeMappings);
+  }, [tableA, tableB, activeMappings]);
+
+  // Mapping handlers
+  const handleAddMapping = (colA: string, colB: string) => {
+    if (!colA || !colB) return;
+    // Remove any existing mappings involving colA or colB to avoid duplicates
+    const filtered = activeMappings.filter(
+      (m) => m.colA.toLowerCase() !== colA.toLowerCase() && m.colB.toLowerCase() !== colB.toLowerCase()
+    );
+    setCustomColumnMappings([
+      ...filtered,
+      { colA, colB, isAutoMatched: false },
+    ]);
+    setNewMapColA('');
+    setNewMapColB('');
+  };
+
+  const handleRemoveMapping = (colA: string, colB: string) => {
+    const filtered = activeMappings.filter(
+      (m) => !(m.colA.toLowerCase() === colA.toLowerCase() && m.colB.toLowerCase() === colB.toLowerCase())
+    );
+    setCustomColumnMappings(filtered);
+  };
+
+  const handleAcceptAllFuzzy = () => {
+    if (fuzzySuggestions.length === 0) return;
+    const current = [...activeMappings];
+    fuzzySuggestions.forEach((sugg) => {
+      const filtered = current.filter(
+        (m) => m.colA.toLowerCase() !== sugg.colA.toLowerCase() && m.colB.toLowerCase() !== sugg.colB.toLowerCase()
+      );
+      filtered.push(sugg);
+      current.length = 0;
+      current.push(...filtered);
+    });
+    setCustomColumnMappings([...current]);
+  };
+
+  const handleResetMappings = () => {
+    setCustomColumnMappings([]);
+  };
+
+  // Schema diff result (takes active column mappings into account)
   const schemaDiff = useMemo(() => {
     if (!tableA || !tableB) return null;
-    return compareSchemas(tableA, tableB);
-  }, [tableA, tableB]);
+    return compareSchemas(tableA, tableB, activeMappings);
+  }, [tableA, tableB, activeMappings]);
 
-  // Available common columns to serve as Key column
-  const commonColumns = useMemo(() => {
-    if (!tableA || !tableB) return [];
-    return tableA.columns
-      .map((c) => c.name)
-      .filter((name) => tableB.columns.some((cB) => cB.name.toLowerCase() === name.toLowerCase()));
-  }, [tableA, tableB]);
-
-  // Effective key columns (supports single or multi-column composite identity)
+  // Effective identity key pairs (supports single or multi-column composite identity with mapped names)
   const effectiveKeys = useMemo(() => {
-    const validCustom = customKeyCols.filter((col) => commonColumns.includes(col));
+    const validCustom = customKeyCols.filter((col) =>
+      activeMappings.some(
+        (m) => m.colA === col || m.colB === col || `${m.colA} ↔ ${m.colB}` === col
+      )
+    );
     if (validCustom.length > 0) return validCustom;
     if (tableA && tableB) {
-      const auto = autoDetectKeyColumn(tableA, tableB);
-      return auto ? [auto] : [];
+      const auto = autoDetectKeyColumn(tableA, tableB, activeMappings);
+      if (auto) {
+        const match = activeMappings.find((m) => m.colA === auto);
+        return match ? [match.colA === match.colB ? match.colA : `${match.colA} ↔ ${match.colB}`] : [auto];
+      }
     }
     return [];
-  }, [customKeyCols, commonColumns, tableA, tableB]);
+  }, [customKeyCols, activeMappings, tableA, tableB]);
 
-  const effectiveKeyLabel = useMemo(() => effectiveKeys.join(' + '), [effectiveKeys]);
+  const effectiveKeyPairs = useMemo<KeyPair[]>(() => {
+    return effectiveKeys.map((k) => {
+      const match = activeMappings.find(
+        (m) => m.colA === k || m.colB === k || `${m.colA} ↔ ${m.colB}` === k
+      );
+      if (match) {
+        return { colA: match.colA, colB: match.colB };
+      }
+      return { colA: k, colB: k };
+    });
+  }, [effectiveKeys, activeMappings]);
+
+  const effectiveKeyLabel = useMemo(() => {
+    return effectiveKeyPairs
+      .map((kp) => (kp.colA === kp.colB ? kp.colA : `${kp.colA} ↔ ${kp.colB}`))
+      .join(' + ');
+  }, [effectiveKeyPairs]);
 
   const availableAddKeys = useMemo(() => {
-    return commonColumns.filter((col) => !effectiveKeys.includes(col));
-  }, [commonColumns, effectiveKeys]);
+    return activeMappings
+      .map((m) => (m.colA === m.colB ? m.colA : `${m.colA} ↔ ${m.colB}`))
+      .filter((label) => !effectiveKeys.includes(label));
+  }, [activeMappings, effectiveKeys]);
 
-  // Data diff result
+  // Data diff result (evaluates mapped pairs, e.g. actual ↔ act)
   const dataDiff = useMemo(() => {
     if (!tableA || !tableB) return null;
-    return compareData(tableA, dataA, tableB, dataB, effectiveKeys);
-  }, [tableA, dataA, tableB, dataB, effectiveKeys]);
+    return compareData(tableA, dataA, tableB, dataB, effectiveKeyPairs, activeMappings);
+  }, [tableA, dataA, tableB, dataB, effectiveKeyPairs, activeMappings]);
 
   // Filtered rows for data comparison tab
   const filteredDiffRows = useMemo(() => {
@@ -165,53 +270,112 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
     setSelectedTableBName(temp);
   };
 
-  // Candidate measures for aggregate summary
+  // Candidate measures for aggregate summary (supports mapped pairs like actual ↔ act)
   const candidateMeasures = useMemo(() => {
-    const list: string[] = ['*'];
+    const list: { key: string; label: string; colA: string; colB: string }[] = [
+      { key: '*', label: '* (Row Count)', colA: '*', colB: '*' },
+    ];
     if (!tableA || !tableB) return list;
 
-    // First add columns that look like measures or have numeric types
-    commonColumns.forEach((colName) => {
-      const colA = tableA.columns.find((c) => c.name.toLowerCase() === colName.toLowerCase());
-      const isNumType = colA && (colA.type === 'INTEGER' || colA.type === 'FLOAT');
-      const isNumName = /(qty|quantity|amount|total|price|cost|sales|rev|revenue|count|sum|balance|score|rate|val|value)/i.test(colName);
+    // First add mapped columns that look like measures or have numeric types
+    activeMappings.forEach((m) => {
+      const colA = tableA.columns.find((c) => c.name.toLowerCase() === m.colA.toLowerCase());
+      const colB = tableB.columns.find((c) => c.name.toLowerCase() === m.colB.toLowerCase());
+      const isNumType =
+        (colA && (colA.type === 'INTEGER' || colA.type === 'FLOAT')) ||
+        (colB && (colB.type === 'INTEGER' || colB.type === 'FLOAT'));
+      const isNumName =
+        /(qty|quantity|amount|total|price|cost|sales|rev|revenue|count|sum|balance|score|rate|val|value|act|actual)/i.test(
+          m.colA
+        ) ||
+        /(qty|quantity|amount|total|price|cost|sales|rev|revenue|count|sum|balance|score|rate|val|value|act|actual)/i.test(
+          m.colB
+        );
+      const key = m.colA === m.colB ? m.colA : `${m.colA} ↔ ${m.colB}`;
       if (isNumType || isNumName) {
-        list.push(colName);
+        list.push({ key, label: key, colA: m.colA, colB: m.colB });
       }
     });
 
-    // Then add other common columns
-    commonColumns.forEach((colName) => {
-      if (!list.includes(colName)) {
-        list.push(colName);
+    // Then add other mapped pairs
+    activeMappings.forEach((m) => {
+      const key = m.colA === m.colB ? m.colA : `${m.colA} ↔ ${m.colB}`;
+      if (!list.some((item) => item.key === key)) {
+        list.push({ key, label: key, colA: m.colA, colB: m.colB });
       }
     });
 
     return list;
-  }, [commonColumns, tableA, tableB]);
+  }, [activeMappings, tableA, tableB]);
 
   // Effective dimensions for aggregate comparison
   const effectiveAggDimensions = useMemo(() => {
-    const validCustom = customAggDimensions.filter((col) => commonColumns.includes(col));
+    const validCustom = customAggDimensions.filter((dim) =>
+      activeMappings.some(
+        (m) => m.colA === dim || m.colB === dim || `${m.colA} ↔ ${m.colB}` === dim
+      )
+    );
     if (validCustom.length > 0) return validCustom;
     // Default to effective identity keys if available
     if (effectiveKeys.length > 0) return effectiveKeys;
-    // Fallback to first non-measure common column
-    const nonMeasure = commonColumns.find((c) => !candidateMeasures.slice(1).includes(c));
-    return nonMeasure ? [nonMeasure] : (commonColumns.length > 0 ? [commonColumns[0]] : []);
-  }, [customAggDimensions, commonColumns, effectiveKeys, candidateMeasures]);
-
-  const effectiveAggMeasure = useMemo(() => {
-    if (aggMeasure && (aggMeasure === '*' || commonColumns.includes(aggMeasure))) {
-      return aggMeasure;
+    // Fallback to first non-measure mapped column
+    const nonMeasure = activeMappings.find((m) => {
+      const key = m.colA === m.colB ? m.colA : `${m.colA} ↔ ${m.colB}`;
+      return !candidateMeasures.slice(1).some((cm) => cm.key === key);
+    });
+    if (nonMeasure) {
+      return [nonMeasure.colA === nonMeasure.colB ? nonMeasure.colA : `${nonMeasure.colA} ↔ ${nonMeasure.colB}`];
     }
-    const firstNum = candidateMeasures.find((m) => m !== '*' && !effectiveAggDimensions.includes(m));
-    return firstNum || (candidateMeasures.length > 1 ? candidateMeasures[1] : '*');
-  }, [aggMeasure, commonColumns, candidateMeasures, effectiveAggDimensions]);
+    return activeMappings.length > 0
+      ? [activeMappings[0].colA === activeMappings[0].colB ? activeMappings[0].colA : `${activeMappings[0].colA} ↔ ${activeMappings[0].colB}`]
+      : [];
+  }, [customAggDimensions, activeMappings, effectiveKeys, candidateMeasures]);
+
+  const effectiveAggDimensionPairs = useMemo<KeyPair[]>(() => {
+    return effectiveAggDimensions.map((d) => {
+      const match = activeMappings.find(
+        (m) => m.colA === d || m.colB === d || `${m.colA} ↔ ${m.colB}` === d
+      );
+      if (match) {
+        return { colA: match.colA, colB: match.colB };
+      }
+      return { colA: d, colB: d };
+    });
+  }, [effectiveAggDimensions, activeMappings]);
+
+  const effectiveAggMeasurePair = useMemo<KeyPair>(() => {
+    if (aggMeasure) {
+      if (aggMeasure === '*') return { colA: '*', colB: '*' };
+      const match = activeMappings.find(
+        (m) => m.colA === aggMeasure || m.colB === aggMeasure || `${m.colA} ↔ ${m.colB}` === aggMeasure
+      );
+      if (match) {
+        return { colA: match.colA, colB: match.colB };
+      }
+    }
+    const firstMeas = candidateMeasures.find(
+      (m) => m.key !== '*' && !effectiveAggDimensions.includes(m.key)
+    );
+    if (firstMeas) {
+      return { colA: firstMeas.colA, colB: firstMeas.colB };
+    }
+    return candidateMeasures.length > 1
+      ? { colA: candidateMeasures[1].colA, colB: candidateMeasures[1].colB }
+      : { colA: '*', colB: '*' };
+  }, [aggMeasure, activeMappings, candidateMeasures, effectiveAggDimensions]);
+
+  const effectiveAggMeasureKey = useMemo(() => {
+    if (effectiveAggMeasurePair.colA === '*') return '*';
+    return effectiveAggMeasurePair.colA === effectiveAggMeasurePair.colB
+      ? effectiveAggMeasurePair.colA
+      : `${effectiveAggMeasurePair.colA} ↔ ${effectiveAggMeasurePair.colB}`;
+  }, [effectiveAggMeasurePair]);
 
   const availableAddAggDimensions = useMemo(() => {
-    return commonColumns.filter((col) => !effectiveAggDimensions.includes(col) && col !== effectiveAggMeasure);
-  }, [commonColumns, effectiveAggDimensions, effectiveAggMeasure]);
+    return activeMappings
+      .map((m) => (m.colA === m.colB ? m.colA : `${m.colA} ↔ ${m.colB}`))
+      .filter((label) => !effectiveAggDimensions.includes(label) && label !== effectiveAggMeasureKey);
+  }, [activeMappings, effectiveAggDimensions, effectiveAggMeasureKey]);
 
   // Aggregate diff result
   const aggregateDiff = useMemo(() => {
@@ -221,12 +385,23 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
       dataA,
       tableB,
       dataB,
-      effectiveAggDimensions,
-      effectiveAggMeasure,
+      effectiveAggDimensionPairs,
+      effectiveAggMeasurePair,
       aggFunction,
-      aggTolerance
+      aggTolerance,
+      activeMappings
     );
-  }, [tableA, dataA, tableB, dataB, effectiveAggDimensions, effectiveAggMeasure, aggFunction, aggTolerance]);
+  }, [
+    tableA,
+    dataA,
+    tableB,
+    dataB,
+    effectiveAggDimensionPairs,
+    effectiveAggMeasurePair,
+    aggFunction,
+    aggTolerance,
+    activeMappings,
+  ]);
 
   // Filtered rows for aggregate comparison tab
   const filteredAggRows = useMemo(() => {
@@ -388,6 +563,32 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
               ))}
             </select>
           </div>
+
+          {/* Column Mapping Drawer Toggle Button */}
+          <button
+            type="button"
+            onClick={() => setIsMappingPanelOpen(!isMappingPanelOpen)}
+            className={`px-2.5 sm:px-3 py-1.5 rounded-lg border text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 shrink-0 shadow-xs ${
+              isMappingPanelOpen
+                ? 'bg-blue-600 text-white border-blue-500 shadow-md'
+                : synonymCount > 0
+                ? 'bg-blue-950/80 text-blue-300 border-blue-500/60 hover:bg-blue-900/50'
+                : 'bg-[#0e1b38] text-slate-300 border-[#1e3668] hover:bg-[#182c54]'
+            }`}
+            title="Manage column synonym mappings (e.g. actual ↔ act, material desc ↔ material description)"
+          >
+            <Link2 className="w-3.5 h-3.5 text-blue-400" />
+            <span>Column Mapping ({activeMappings.length})</span>
+            {synonymCount > 0 ? (
+              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-blue-500 text-slate-950 font-mono">
+                {synonymCount} synonym{synonymCount === 1 ? '' : 's'}
+              </span>
+            ) : fuzzySuggestions.length > 0 ? (
+              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse">
+                ⚡ {fuzzySuggestions.length} suggest
+              </span>
+            ) : null}
+          </button>
         </div>
 
         {/* Tab Switcher */}
@@ -464,6 +665,189 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
           </button>
         </div>
       </div>
+
+      {/* COLLAPSIBLE COLUMN MAPPING & SYNONYM PAIRING DRAWER */}
+      {isMappingPanelOpen && (
+        <div className="bg-[#0b1429] border-b border-[#1d3567] p-4 sm:p-5 space-y-4 shadow-xl animate-in fade-in duration-150">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-blue-400 shrink-0">
+                <Link2 className="w-4 h-4" />
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-slate-100 flex items-center gap-2">
+                  <span>Manual Column Mappings & Synonyms</span>
+                  <span className="text-[10px] text-blue-300 bg-blue-950 px-2 py-0.5 rounded border border-blue-800 font-mono">
+                    {activeMappings.length} Active Pairings ({synonymCount} Synonyms)
+                  </span>
+                </h4>
+                <p className="text-[11px] text-slate-400">
+                  Map columns with different names between tables (e.g. <span className="font-mono text-blue-300">actual ↔ act</span>, <span className="font-mono text-emerald-300">material desc ↔ material description</span>) for accurate schema matching, row diffs, and aggregate summaries.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {fuzzySuggestions.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleAcceptAllFuzzy}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/50 rounded-lg text-xs font-semibold transition cursor-pointer shadow-xs"
+                  title="Auto-pair columns with similar names or common abbreviations"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Auto-Suggest All ({fuzzySuggestions.length})</span>
+                </button>
+              )}
+
+              {customColumnMappings.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleResetMappings}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#0e1b38] hover:bg-[#182c54] text-slate-300 hover:text-white border border-[#1e3668] rounded-lg text-xs transition cursor-pointer"
+                  title="Reset to exact column name matches only"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  <span>Reset to Exact Matches</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setIsMappingPanelOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-[#122347] transition cursor-pointer"
+                title="Close Mapping Panel"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Manual Column Pair Adder Form */}
+          <div className="flex flex-wrap items-center gap-2.5 bg-[#070e1c] p-3 rounded-xl border border-[#182c54]">
+            <div className="text-xs font-semibold text-slate-300 flex items-center gap-1">
+              <Plus className="w-3.5 h-3.5 text-blue-400" />
+              <span>Add Pair:</span>
+            </div>
+
+            {/* Select Col A */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-bold text-blue-400 font-mono">Source (A):</span>
+              <select
+                value={newMapColA}
+                onChange={(e) => setNewMapColA(e.target.value)}
+                className="bg-[#0e1b38] border border-[#1e3668] text-slate-200 text-xs rounded-lg px-2.5 py-1 focus:outline-none focus:border-blue-500 cursor-pointer font-mono"
+              >
+                <option value="">-- Choose Column from {tableA?.name} --</option>
+                {tableA?.columns.map((c) => (
+                  <option key={c.name} value={c.name}>
+                    {c.name} ({c.type})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <ArrowRightLeft className="w-3.5 h-3.5 text-slate-500" />
+
+            {/* Select Col B */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-bold text-emerald-400 font-mono">Target (B):</span>
+              <select
+                value={newMapColB}
+                onChange={(e) => setNewMapColB(e.target.value)}
+                className="bg-[#0e1b38] border border-[#1e3668] text-slate-200 text-xs rounded-lg px-2.5 py-1 focus:outline-none focus:border-blue-500 cursor-pointer font-mono"
+              >
+                <option value="">-- Choose Column from {tableB?.name} --</option>
+                {tableB?.columns.map((c) => (
+                  <option key={c.name} value={c.name}>
+                    {c.name} ({c.type})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <button
+              type="button"
+              disabled={!newMapColA || !newMapColB}
+              onClick={() => handleAddMapping(newMapColA, newMapColB)}
+              className="px-3 py-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:hover:bg-blue-600 text-white text-xs font-bold rounded-lg transition cursor-pointer flex items-center gap-1 shadow-xs"
+            >
+              <Link2 className="w-3.5 h-3.5" />
+              <span>Map Pair</span>
+            </button>
+          </div>
+
+          {/* Fuzzy Suggestions Pill Bar (if any) */}
+          {fuzzySuggestions.length > 0 && (
+            <div className="bg-amber-950/20 border border-amber-500/30 rounded-xl p-3 space-y-2">
+              <div className="text-[11px] font-bold text-amber-300 flex items-center gap-1.5">
+                <Wand2 className="w-3.5 h-3.5 text-amber-400" />
+                <span>Fuzzy Synonym Suggestions Detected:</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {fuzzySuggestions.map((sugg) => (
+                  <button
+                    key={`${sugg.colA}-${sugg.colB}`}
+                    type="button"
+                    onClick={() => handleAddMapping(sugg.colA, sugg.colB)}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#0e1b38] hover:bg-[#182c54] border border-amber-500/50 text-xs font-mono text-amber-200 transition cursor-pointer group shadow-xs"
+                    title={`Click to map "${sugg.colA}" in Table A to "${sugg.colB}" in Table B`}
+                  >
+                    <span className="text-blue-300 font-bold">{sugg.colA}</span>
+                    <ArrowRightLeft className="w-3 h-3 text-amber-400 group-hover:scale-110 transition" />
+                    <span className="text-emerald-300 font-bold">{sugg.colB}</span>
+                    <span className="text-[10px] text-amber-400 font-sans font-bold ml-1 bg-amber-500/20 px-1 py-0.2 rounded">
+                      + Map
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Active Mappings Chips Grid */}
+          <div className="space-y-1.5">
+            <div className="text-[11px] font-semibold text-slate-400">
+              Current Column Mappings ({activeMappings.length}):
+            </div>
+            <div className="flex flex-wrap items-center gap-2 max-h-48 overflow-y-auto p-1">
+              {activeMappings.map((m) => {
+                const isSynonym = m.colA.toLowerCase() !== m.colB.toLowerCase();
+                return (
+                  <div
+                    key={`${m.colA}-${m.colB}`}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-mono border transition ${
+                      isSynonym
+                        ? 'bg-blue-950/90 border-blue-500/70 text-blue-200 shadow-xs'
+                        : 'bg-[#070e1c] border-[#182c54] text-slate-300'
+                    }`}
+                  >
+                    <span className="text-blue-300 font-semibold">{m.colA}</span>
+                    <ArrowRightLeft className={`w-3 h-3 ${isSynonym ? 'text-blue-400' : 'text-slate-600'}`} />
+                    <span className="text-emerald-300 font-semibold">{m.colB}</span>
+
+                    {isSynonym && (
+                      <span className="text-[9px] bg-blue-500/20 text-blue-300 px-1 py-0.2 rounded font-sans font-bold">
+                        Synonym
+                      </span>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveMapping(m.colA, m.colB)}
+                      className="p-0.5 hover:bg-rose-900/60 text-slate-400 hover:text-rose-200 rounded transition cursor-pointer ml-0.5"
+                      title={`Remove mapping for ${m.colA} ↔ ${m.colB}`}
+                      aria-label={`Unlink ${m.colA} and ${m.colB}`}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Diff Content Area */}
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
@@ -682,11 +1066,15 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
                       className="bg-[#070e1c] border border-[#1b315e] text-xs text-slate-300 font-mono rounded-lg px-2 py-1 focus:outline-none focus:border-blue-500 cursor-pointer"
                       title="Switch primary join key"
                     >
-                      {commonColumns.map((col) => (
-                        <option key={col} value={col}>
-                          Switch to: {col} {col === autoDetectKeyColumn(tableA!, tableB!) ? '(Auto-Detected)' : ''}
-                        </option>
-                      ))}
+                      {activeMappings.map((m) => {
+                        const label = m.colA === m.colB ? m.colA : `${m.colA} ↔ ${m.colB}`;
+                        const isAuto = m.colA === autoDetectKeyColumn(tableA!, tableB!, activeMappings);
+                        return (
+                          <option key={label} value={label}>
+                            Switch to: {label} {isAuto ? '(Auto-Detected)' : ''}
+                          </option>
+                        );
+                      })}
                     </select>
                   )}
 
@@ -914,16 +1302,26 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
                     <tr>
                       <th className="py-2.5 px-4 font-mono">Key ({effectiveKeyLabel})</th>
                       <th className="py-2.5 px-4">Status</th>
-                      {commonColumns.map((col) => {
-                        const diffCount = dataDiff?.columnDiscrepancies?.[col] || 0;
+                      {activeMappings.map((m) => {
+                        const pairKey = m.colA === m.colB ? m.colA : `${m.colA} ↔ ${m.colB}`;
+                        const diffCount = dataDiff?.columnDiscrepancies?.[pairKey] || 0;
+                        const isSynonym = m.colA.toLowerCase() !== m.colB.toLowerCase();
                         return (
-                          <th key={col} className="py-2.5 px-4 font-mono max-w-[240px]">
+                          <th key={pairKey} className="py-2.5 px-4 font-mono max-w-[240px]">
                             <div className="flex items-center gap-1.5">
-                              <span className="truncate">{col}</span>
+                              <span className="truncate" title={pairKey}>{pairKey}</span>
+                              {isSynonym && (
+                                <span
+                                  className="text-[9px] px-1 py-0.2 rounded bg-blue-950 text-blue-300 border border-blue-800 shrink-0"
+                                  title={`Custom mapping: ${m.colA} (A) ↔ ${m.colB} (B)`}
+                                >
+                                  Mapped
+                                </span>
+                              )}
                               {diffCount > 0 && (
                                 <span
                                   className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 font-sans shrink-0"
-                                  title={`${diffCount} value discrepancy alert(s) in ${col}`}
+                                  title={`${diffCount} value discrepancy alert(s) in ${pairKey}`}
                                 >
                                   <AlertTriangle className="w-2.5 h-2.5" />
                                   <span>{diffCount}</span>
@@ -991,13 +1389,14 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
                             )}
                           </td>
 
-                          {commonColumns.map((col) => {
-                            const valA = row.valuesA ? row.valuesA[col] : undefined;
-                            const valB = row.valuesB ? row.valuesB[col] : undefined;
-                            const isChanged = row.changedColumns?.includes(col);
+                          {activeMappings.map((m) => {
+                            const pairKey = m.colA === m.colB ? m.colA : `${m.colA} ↔ ${m.colB}`;
+                            const valA = row.valuesA ? row.valuesA[m.colA] : undefined;
+                            const valB = row.valuesB ? row.valuesB[m.colB] : undefined;
+                            const isChanged = row.changedColumns?.includes(pairKey);
 
                             return (
-                              <td key={col} className="py-2 px-4 max-w-[280px]">
+                              <td key={pairKey} className="py-2 px-4 max-w-[280px]">
                                 {isChanged ? (() => {
                                   // Compute numeric variance if applicable (e.g. qty 700 vs 701 -> diff +1)
                                   const numA =
@@ -1041,14 +1440,14 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
                                       <div className="flex items-center gap-1.5 text-xs font-mono font-semibold">
                                         <span
                                           className="text-red-400 line-through bg-red-950/70 px-1.5 py-0.5 rounded border border-red-900/60 truncate max-w-[110px]"
-                                          title={`Source (${tableA?.name}): ${String(valA ?? 'null')}`}
+                                          title={`Source (${tableA?.name} [${m.colA}]): ${String(valA ?? 'null')}`}
                                         >
                                           {String(valA ?? 'null')}
                                         </span>
                                         <ArrowRight className="w-3 h-3 text-amber-400 shrink-0" />
                                         <span
                                           className="text-emerald-300 font-bold bg-emerald-950/70 px-1.5 py-0.5 rounded border border-emerald-800/60 truncate max-w-[110px]"
-                                          title={`Target (${tableB?.name}): ${String(valB ?? 'null')}`}
+                                          title={`Target (${tableB?.name} [${m.colB}]): ${String(valB ?? 'null')}`}
                                         >
                                           {String(valB ?? 'null')}
                                         </span>
@@ -1137,8 +1536,9 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
                         className="bg-[#070e1c] border border-[#1b315e] text-xs text-slate-300 font-mono rounded-lg px-2 py-1 focus:outline-none focus:border-blue-500 cursor-pointer"
                         title="Switch primary dimension"
                       >
-                        {commonColumns
-                          .filter((c) => c !== effectiveAggMeasure)
+                        {activeMappings
+                          .map((m) => (m.colA === m.colB ? m.colA : `${m.colA} ↔ ${m.colB}`))
+                          .filter((c) => c !== effectiveAggMeasureKey)
                           .map((col) => (
                             <option key={col} value={col}>
                               Switch to: {col}
@@ -1187,14 +1587,14 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
 
                     {/* Column */}
                     <select
-                      value={effectiveAggMeasure}
+                      value={effectiveAggMeasureKey}
                       onChange={(e) => setAggMeasure(e.target.value)}
-                      className="bg-[#070e1c] border border-[#1b315e] text-xs text-slate-200 font-mono rounded-lg px-2.5 py-1 focus:outline-none focus:border-blue-500 cursor-pointer max-w-[180px]"
+                      className="bg-[#070e1c] border border-[#1b315e] text-xs text-slate-200 font-mono rounded-lg px-2.5 py-1 focus:outline-none focus:border-blue-500 cursor-pointer max-w-[200px]"
                       title="Measure column to aggregate"
                     >
-                      {candidateMeasures.map((col) => (
-                        <option key={col} value={col}>
-                          {col === '*' ? '* (Row Count)' : col}
+                      {candidateMeasures.map((m) => (
+                        <option key={m.key} value={m.key}>
+                          {m.label}
                         </option>
                       ))}
                     </select>
@@ -1223,7 +1623,7 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
               {/* Scope Description */}
               <div className="flex flex-wrap items-center justify-between text-xs text-slate-400 gap-2">
                 <div>
-                  Comparing <span className="font-mono text-slate-200 font-bold">{aggFunction}({effectiveAggMeasure})</span> grouped by <span className="font-mono text-blue-300 font-bold">{effectiveAggDimensions.join(' + ') || 'All Rows'}</span> between <span className="text-blue-400 font-semibold">{tableA?.name}</span> and <span className="text-emerald-400 font-semibold">{tableB?.name}</span>.
+                  Comparing <span className="font-mono text-slate-200 font-bold">{aggFunction}({effectiveAggMeasureKey})</span> grouped by <span className="font-mono text-blue-300 font-bold">{effectiveAggDimensions.join(' + ') || 'All Rows'}</span> between <span className="text-blue-400 font-semibold">{tableA?.name}</span> and <span className="text-emerald-400 font-semibold">{tableB?.name}</span>.
                 </div>
                 <div className="text-[11px] text-slate-500">
                   {aggregateDiff.totalGroups} distinct dimension groups analyzed
@@ -1246,7 +1646,7 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
                       </span>
                     </div>
                     <p className="text-xs text-slate-300 mt-1">
-                      Aggregated metric <span className="font-mono font-bold text-amber-300">{aggFunction}({effectiveAggMeasure})</span> differs between <span className="text-blue-300 font-semibold">{tableA?.name}</span> and <span className="text-emerald-300 font-semibold">{tableB?.name}</span>. Net variance: <span className="font-mono font-bold text-amber-200">Δ {aggregateDiff.totalDelta > 0 ? `+${aggregateDiff.totalDelta.toLocaleString()}` : aggregateDiff.totalDelta.toLocaleString()}</span>{aggregateDiff.percentTotalDelta !== null ? ` (${aggregateDiff.percentTotalDelta > 0 ? '+' : ''}${aggregateDiff.percentTotalDelta}%)` : ''}.
+                      Aggregated metric <span className="font-mono font-bold text-amber-300">{aggFunction}({effectiveAggMeasureKey})</span> differs between <span className="text-blue-300 font-semibold">{tableA?.name}</span> and <span className="text-emerald-300 font-semibold">{tableB?.name}</span>. Net variance: <span className="font-mono font-bold text-amber-200">Δ {aggregateDiff.totalDelta > 0 ? `+${aggregateDiff.totalDelta.toLocaleString()}` : aggregateDiff.totalDelta.toLocaleString()}</span>{aggregateDiff.percentTotalDelta !== null ? ` (${aggregateDiff.percentTotalDelta > 0 ? '+' : ''}${aggregateDiff.percentTotalDelta}%)` : ''}.
                     </p>
                   </div>
                 </div>
@@ -1270,7 +1670,7 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
               <div className="p-3.5 rounded-xl border bg-emerald-950/20 border-emerald-500/30 flex items-center justify-between gap-3 text-xs text-emerald-300">
                 <div className="flex items-center gap-2.5">
                   <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>Zero Aggregate Discrepancies: All {aggregateDiff.totalGroups} groups have matching totals across both tables for {aggFunction}({effectiveAggMeasure}).</span>
+                  <span>Zero Aggregate Discrepancies: All {aggregateDiff.totalGroups} groups have matching totals across both tables for {aggFunction}({effectiveAggMeasureKey}).</span>
                 </div>
                 <span className="text-[10px] font-mono font-bold bg-emerald-900/60 text-emerald-300 px-2 py-0.5 rounded border border-emerald-700/50">
                   100% RECONCILED
@@ -1464,7 +1864,7 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
                   <h3 className="text-sm font-semibold text-slate-100 flex items-center gap-2">
                     <span>Grouped Aggregate Comparison</span>
                     <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800">
-                      Metric: {aggFunction}({effectiveAggMeasure})
+                      Metric: {aggFunction}({effectiveAggMeasureKey})
                     </span>
                   </h3>
                   <p className="text-xs text-slate-400 mt-0.5">

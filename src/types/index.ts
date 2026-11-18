@@ -149,6 +149,17 @@ export interface SchemaDiffResult {
   typeMismatches: { column: string; typeA: DataType; typeB: DataType }[];
 }
 
+export interface ColumnMapping {
+  colA: string;
+  colB: string;
+  isAutoMatched?: boolean;
+}
+
+export interface KeyPair {
+  colA: string;
+  colB: string;
+}
+
 export interface DataDiffRow {
   key: string;
   status: 'identical' | 'modified' | 'only_a' | 'only_b';
@@ -162,6 +173,8 @@ export interface DataDiffResult {
   tableBName: string;
   keyColumn: string;
   keyColumns?: string[];
+  keyPairs?: KeyPair[];
+  columnMappings?: ColumnMapping[];
   totalRowsA: number;
   totalRowsB: number;
   identicalCount: number;
@@ -192,7 +205,11 @@ export interface AggregateDiffResult {
   tableAName: string;
   tableBName: string;
   dimensions: string[];
+  dimensionPairs?: KeyPair[];
   measureCol: string;
+  measureColA?: string;
+  measureColB?: string;
+  measurePair?: KeyPair;
   measureAgg: AggregateFunction;
   tolerance: number;
   rows: AggregateDiffRow[];
