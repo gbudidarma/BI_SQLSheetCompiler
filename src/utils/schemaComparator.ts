@@ -1,3 +1,4 @@
+import alasql from 'alasql';
 import {
   TableSchema,
   SchemaDiffResult,
@@ -527,10 +528,72 @@ LIMIT 100;`;
   };
 }
 
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Automatically translates column names in a WHERE clause for Table B
+ * using mapped column synonyms (e.g. 'actual > 100' -> 'act > 100').
+ */
+export function translateWhereClauseForTarget(
+  whereClause: string,
+  columnMappings: ColumnMapping[] = []
+): string {
+  if (!whereClause || !whereClause.trim()) return '';
+  let result = whereClause;
+
+  columnMappings.forEach((m) => {
+    if (m.colA.toLowerCase() !== m.colB.toLowerCase()) {
+      // Replace bracketed [colA] with [colB]
+      const bracketRegex = new RegExp(`\\[${escapeRegex(m.colA)}\\]`, 'gi');
+      result = result.replace(bracketRegex, `[${m.colB}]`);
+
+      // Replace word boundary colA with colB
+      const wordRegex = new RegExp(`\\b${escapeRegex(m.colA)}\\b`, 'gi');
+      result = result.replace(wordRegex, m.colB);
+    }
+  });
+
+  return result;
+}
+
+export interface FilterDatasetResult {
+  data: Record<string, any>[];
+  error?: string;
+}
+
+/**
+ * Filters an in-memory row dataset using an SQL WHERE expression evaluated by AlaSQL.
+ */
+export function filterDatasetWithWhere(
+  data: Record<string, any>[],
+  whereCondition?: string
+): FilterDatasetResult {
+  if (!whereCondition || !whereCondition.trim()) {
+    return { data };
+  }
+
+  const cleanWhere = whereCondition.replace(/^\s*WHERE\s+/i, '').trim();
+  if (!cleanWhere) {
+    return { data };
+  }
+
+  try {
+    const res = alasql(`SELECT * FROM ? WHERE ${cleanWhere}`, [data]);
+    return { data: Array.isArray(res) ? res : data };
+  } catch (err: any) {
+    return {
+      data,
+      error: err?.message || 'Invalid WHERE condition syntax',
+    };
+  }
+}
+
 /**
  * Generates an ANSI / AlaSQL compatible aggregate reconciliation query
  * grouping by dimensions and comparing measure metrics with discrepancy alerts.
- * Supports manual dimension and measure column pairings.
+ * Supports manual dimension and measure column pairings and optional WHERE filter clauses.
  */
 export function generateAggregateReconciliationSql(
   tableAName: string,
@@ -539,7 +602,9 @@ export function generateAggregateReconciliationSql(
   measureCol: string | KeyPair,
   measureAgg: AggregateFunction = 'SUM',
   tolerance: number = 0,
-  columnMappings?: ColumnMapping[]
+  columnMappings?: ColumnMapping[],
+  whereClauseA?: string,
+  whereClauseB?: string
 ): string {
   const effectiveMappings = columnMappings || [];
 
@@ -576,6 +641,18 @@ export function generateAggregateReconciliationSql(
     mPair = { colA: '*', colB: '*' };
   }
 
+  const cleanWhereA = whereClauseA ? whereClauseA.replace(/^\s*WHERE\s+/i, '').trim() : '';
+  const cleanWhereB = whereClauseB ? whereClauseB.replace(/^\s*WHERE\s+/i, '').trim() : '';
+  const whereSqlA = cleanWhereA ? `\n  WHERE ${cleanWhereA}` : '';
+  const whereSqlB = cleanWhereB ? `\n  WHERE ${cleanWhereB}` : '';
+
+  const filterComments = [
+    cleanWhereA ? `/* Filter (${tableAName}): WHERE ${cleanWhereA} */` : '',
+    cleanWhereB ? `/* Filter (${tableBName}): WHERE ${cleanWhereB} */` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
   const isAllRows = dimPairs.length === 0;
   const dimLabels = isAllRows
     ? 'All Records (Grand Total)'
@@ -602,7 +679,7 @@ export function generateAggregateReconciliationSql(
     return `/* ==================================================================== */
 /* AGGREGATE SUMMARY RECONCILIATION: ${tableAName} vs ${tableBName} */
 /* Scope: Overall Totals | Metric: ${aggExprA} vs ${aggExprB} */
-/* ==================================================================== */
+${filterComments ? `${filterComments}\n` : ''}/* ==================================================================== */
 SELECT
   a.agg_val AS ${colA},
   b.agg_val AS ${colB},
@@ -615,11 +692,11 @@ SELECT
   b.row_count AS ${tableBName}_row_count
 FROM (
   SELECT 1 AS join_id, ${aggExprA} AS agg_val, COUNT(*) AS row_count
-  FROM ${tableAName}
+  FROM ${tableAName}${whereSqlA}
 ) a
 JOIN (
   SELECT 1 AS join_id, ${aggExprB} AS agg_val, COUNT(*) AS row_count
-  FROM ${tableBName}
+  FROM ${tableBName}${whereSqlB}
 ) b
   ON a.join_id = b.join_id;`;
   }
@@ -636,7 +713,7 @@ JOIN (
   return `/* ==================================================================== */
 /* AGGREGATE SUMMARY RECONCILIATION: ${tableAName} vs ${tableBName} */
 /* Group By: ${dimLabels} | Metric: ${aggExprA} vs ${aggExprB} */
-/* ==================================================================== */
+${filterComments ? `${filterComments}\n` : ''}/* ==================================================================== */
 SELECT
   ${dimSelect},
   a.agg_val AS ${colA},
@@ -655,7 +732,7 @@ FROM (
     ${dimSubSelectA},
     ${aggExprA} AS agg_val,
     COUNT(*) AS row_count
-  FROM ${tableAName}
+  FROM ${tableAName}${whereSqlA}
   GROUP BY ${groupByA}
 ) a
 FULL OUTER JOIN (
@@ -663,7 +740,7 @@ FULL OUTER JOIN (
     ${dimSubSelectB},
     ${aggExprB} AS agg_val,
     COUNT(*) AS row_count
-  FROM ${tableBName}
+  FROM ${tableBName}${whereSqlB}
   GROUP BY ${groupByB}
 ) b
   ON ${joinClause}
@@ -702,9 +779,29 @@ export function compareAggregateData(
   measureCol: string | KeyPair,
   measureAgg: AggregateFunction = 'SUM',
   tolerance: number = 0,
-  columnMappings?: ColumnMapping[]
+  columnMappings?: ColumnMapping[],
+  whereCondition?: string | { whereA?: string; whereB?: string }
 ): AggregateDiffResult {
   const effectiveMappings = columnMappings || [];
+
+  let whereA = '';
+  let whereB = '';
+  if (typeof whereCondition === 'string') {
+    whereA = whereCondition.trim();
+    whereB = translateWhereClauseForTarget(whereA, effectiveMappings);
+  } else if (typeof whereCondition === 'object' && whereCondition !== null) {
+    whereA = (whereCondition.whereA || '').trim();
+    whereB = (whereCondition.whereB || '').trim();
+    if (!whereB && whereA) {
+      whereB = translateWhereClauseForTarget(whereA, effectiveMappings);
+    }
+  }
+
+  // Filter datasets with WHERE condition if specified
+  const filterResA = filterDatasetWithWhere(dataA, whereA);
+  const filterResB = filterDatasetWithWhere(dataB, whereB);
+  const activeDataA = filterResA.data;
+  const activeDataB = filterResB.data;
 
   // Normalize dimension pairs
   const dimPairs: KeyPair[] = [];
@@ -834,8 +931,8 @@ export function compareAggregateData(
     return Number(group.sum.toFixed(4));
   };
 
-  const mapA = aggregateDataset(dataA, buildGroupKeyA, mPair.colA);
-  const mapB = aggregateDataset(dataB, buildGroupKeyB, mPair.colB);
+  const mapA = aggregateDataset(activeDataA, buildGroupKeyA, mPair.colA);
+  const mapB = aggregateDataset(activeDataB, buildGroupKeyB, mPair.colB);
 
   const allKeys = Array.from(new Set([...mapA.keys(), ...mapB.keys()]));
 
@@ -970,7 +1067,9 @@ export function compareAggregateData(
     mPair,
     measureAgg,
     tolerance,
-    effectiveMappings
+    effectiveMappings,
+    whereA,
+    whereB
   );
 
   const dimNames = dimPairs.map((dp) => (dp.colA === dp.colB ? dp.colA : `${dp.colA} ↔ ${dp.colB}`));
@@ -987,6 +1086,12 @@ export function compareAggregateData(
     measurePair: mPair,
     measureAgg,
     tolerance,
+    whereClauseA: whereA || undefined,
+    whereClauseB: whereB || undefined,
+    whereErrorA: filterResA.error,
+    whereErrorB: filterResB.error,
+    filteredRowsCountA: activeDataA.length,
+    filteredRowsCountB: activeDataB.length,
     rows,
     totalGroups,
     balancedGroups,

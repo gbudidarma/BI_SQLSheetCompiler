@@ -87,6 +87,9 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
   const [aggTolerance, setAggTolerance] = useState<number>(0);
   const [aggFilter, setAggFilter] = useState<'all' | 'alerts' | 'balanced' | 'only_a' | 'only_b'>('all');
   const [aggSearch, setAggSearch] = useState<string>('');
+  const [aggWhereA, setAggWhereA] = useState<string>('');
+  const [aggWhereB, setAggWhereB] = useState<string>('');
+  const [isSeparateWhere, setIsSeparateWhere] = useState<boolean>(false);
   const [reconciliationType, setReconciliationType] = useState<'row' | 'aggregate'>('row');
 
   // Keep selection synchronized with available tables
@@ -107,6 +110,9 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
     setAggMeasure('');
     setNewMapColA('');
     setNewMapColB('');
+    setAggWhereA('');
+    setAggWhereB('');
+    setIsSeparateWhere(false);
   }, [selectedTableAName, selectedTableBName]);
 
   const tableA = useMemo(() => tables.find((t) => t.name === selectedTableAName), [tables, selectedTableAName]);
@@ -377,6 +383,31 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
       .filter((label) => !effectiveAggDimensions.includes(label) && label !== effectiveAggMeasureKey);
   }, [activeMappings, effectiveAggDimensions, effectiveAggMeasureKey]);
 
+  // Quick WHERE suggestions based on columns in Table A
+  const quickWhereSuggestions = useMemo(() => {
+    if (!tableA) return [];
+    const chips: string[] = [];
+    tableA.columns.forEach((c) => {
+      const lower = c.name.toLowerCase();
+      if (lower.includes('status') || lower.includes('state')) {
+        chips.push(`${c.name} = 'ACTIVE'`);
+        chips.push(`${c.name} <> 'CANCELLED'`);
+      } else if (lower.includes('year')) {
+        chips.push(`${c.name} = 2026`);
+      } else if (lower.includes('date')) {
+        chips.push(`${c.name} >= '2026-01-01'`);
+      } else if (c.type === 'INTEGER' || c.type === 'FLOAT') {
+        if (chips.length < 5) {
+          chips.push(`${c.name} > 0`);
+        }
+      }
+    });
+    if (chips.length === 0 && tableA.columns.length > 0) {
+      chips.push(`${tableA.columns[0].name} IS NOT NULL`);
+    }
+    return chips.slice(0, 5);
+  }, [tableA]);
+
   // Aggregate diff result
   const aggregateDiff = useMemo(() => {
     if (!tableA || !tableB) return null;
@@ -389,7 +420,11 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
       effectiveAggMeasurePair,
       aggFunction,
       aggTolerance,
-      activeMappings
+      activeMappings,
+      {
+        whereA: aggWhereA,
+        whereB: isSeparateWhere ? aggWhereB : undefined,
+      }
     );
   }, [
     tableA,
@@ -401,6 +436,9 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
     aggFunction,
     aggTolerance,
     activeMappings,
+    aggWhereA,
+    aggWhereB,
+    isSeparateWhere,
   ]);
 
   // Filtered rows for aggregate comparison tab
@@ -431,7 +469,7 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
 
   const handleExportAggCsv = () => {
     if (!aggregateDiff || !tableA || !tableB) return;
-    const measureLabel = `${aggregateDiff.measureAgg}_${aggregateDiff.measureCol}`;
+    const measureLabel = `${aggregateDiff.measureAgg}_${(aggregateDiff.measureCol || '').replace(/ ↔ /g, '_vs_')}`;
     const headerCols = [
       ...aggregateDiff.dimensions,
       'Reconciliation_Status',
@@ -455,7 +493,10 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
         r.countB,
       ].join(',');
     });
-    const csvContent = [headerCols.join(','), ...rows].join('\n');
+    const filterHeader = aggregateDiff.whereClauseA || aggregateDiff.whereClauseB
+      ? `# WHERE Filter (${tableA.name}): ${aggregateDiff.whereClauseA || 'None'}\n# WHERE Filter (${tableB.name}): ${aggregateDiff.whereClauseB || 'None'}\n`
+      : '';
+    const csvContent = filterHeader + [headerCols.join(','), ...rows].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -1620,10 +1661,248 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
                 </div>
               </div>
 
+              {/* WHERE Filter Condition Section */}
+              <div className="bg-[#070e1c] border border-[#1b315e] rounded-xl p-3.5 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-md bg-blue-500/20 border border-blue-500/40 flex items-center justify-center text-blue-400">
+                      <Filter className="w-3.5 h-3.5" />
+                    </div>
+                    <span className="text-xs font-semibold text-slate-200">
+                      WHERE Condition Filter
+                    </span>
+                    <span className="text-[10px] text-slate-400 bg-slate-800/60 px-2 py-0.5 rounded border border-slate-700/60">
+                      Pre-Aggregation Filter
+                    </span>
+                    {(aggWhereA.trim() || (isSeparateWhere && aggWhereB.trim())) && (
+                      <span className="text-[10px] font-mono font-bold bg-blue-900/60 text-blue-300 px-2 py-0.5 rounded border border-blue-600/50 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse"></span>
+                        FILTER ACTIVE ({aggregateDiff.filteredRowsCountA ?? dataA.length}/{dataA.length} in A, {aggregateDiff.filteredRowsCountB ?? dataB.length}/{dataB.length} in B)
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={isSeparateWhere}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setIsSeparateWhere(checked);
+                          if (checked && !aggWhereB) {
+                            setAggWhereB(aggWhereA);
+                          }
+                        }}
+                        className="rounded border-slate-700 bg-slate-900 text-blue-500 focus:ring-0 cursor-pointer"
+                      />
+                      <span className="text-[11px] text-slate-400 hover:text-slate-200">
+                        Separate WHERE for A & B
+                      </span>
+                    </label>
+
+                    {(aggWhereA || aggWhereB) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAggWhereA('');
+                          setAggWhereB('');
+                        }}
+                        className="text-[11px] text-slate-400 hover:text-rose-400 flex items-center gap-1 cursor-pointer transition"
+                      >
+                        <X className="w-3 h-3" />
+                        <span>Clear Filter</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Single vs Separate Inputs */}
+                {!isSeparateWhere ? (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2 bg-[#0a1427] border border-[#1b315e] focus-within:border-blue-500 rounded-lg px-3 py-1.5 transition">
+                      <span className="text-xs font-mono font-bold text-blue-400 select-none">
+                        WHERE
+                      </span>
+                      <input
+                        type="text"
+                        value={aggWhereA}
+                        onChange={(e) => setAggWhereA(e.target.value)}
+                        placeholder="e.g. status = 'COMPLETED' AND order_date >= '2026-01-01' OR qty > 0"
+                        className="bg-transparent text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none flex-1 font-mono"
+                      />
+                      {aggWhereA && (
+                        <button
+                          type="button"
+                          onClick={() => setAggWhereA('')}
+                          className="text-slate-500 hover:text-slate-300 p-0.5 cursor-pointer"
+                          title="Clear WHERE clause"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-400 flex items-center gap-1.5">
+                      <Sparkles className="w-3 h-3 text-amber-400 shrink-0" />
+                      <span>
+                        Shared condition applies to both tables. Mapped column synonyms (e.g. <span className="font-mono text-slate-300">{activeMappings.filter(m => m.colA !== m.colB).map(m => `${m.colA} ➔ ${m.colB}`).slice(0, 2).join(', ') || 'Actual ➔ Act'}</span>) auto-translate for Target (B).
+                      </span>
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                    {/* Source Table A WHERE */}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-blue-400 font-semibold flex items-center gap-1">
+                          Source ({tableA?.name}) WHERE
+                        </span>
+                        <span className="text-slate-500 font-mono text-[10px]">
+                          {aggregateDiff.filteredRowsCountA ?? dataA.length}/{dataA.length} rows
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 bg-[#0a1427] border border-blue-900/50 focus-within:border-blue-500 rounded-lg px-2.5 py-1.5 transition">
+                        <span className="text-xs font-mono font-bold text-blue-400 select-none">
+                          WHERE
+                        </span>
+                        <input
+                          type="text"
+                          value={aggWhereA}
+                          onChange={(e) => setAggWhereA(e.target.value)}
+                          placeholder="e.g. status = 'COMPLETED' AND qty > 0"
+                          className="bg-transparent text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none flex-1 font-mono"
+                        />
+                        {aggWhereA && (
+                          <button
+                            type="button"
+                            onClick={() => setAggWhereA('')}
+                            className="text-slate-500 hover:text-slate-300 p-0.5 cursor-pointer"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Target Table B WHERE */}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-emerald-400 font-semibold flex items-center gap-1">
+                          Target ({tableB?.name}) WHERE
+                        </span>
+                        <span className="text-slate-500 font-mono text-[10px]">
+                          {aggregateDiff.filteredRowsCountB ?? dataB.length}/{dataB.length} rows
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 bg-[#0a1427] border border-emerald-900/50 focus-within:border-emerald-500 rounded-lg px-2.5 py-1.5 transition">
+                        <span className="text-xs font-mono font-bold text-emerald-400 select-none">
+                          WHERE
+                        </span>
+                        <input
+                          type="text"
+                          value={aggWhereB}
+                          onChange={(e) => setAggWhereB(e.target.value)}
+                          placeholder="e.g. status = 'COMPLETED' AND act > 0"
+                          className="bg-transparent text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none flex-1 font-mono"
+                        />
+                        {aggWhereB && (
+                          <button
+                            type="button"
+                            onClick={() => setAggWhereB('')}
+                            className="text-slate-500 hover:text-slate-300 p-0.5 cursor-pointer"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Error Banner if AlaSQL parsing failed */}
+                {(aggregateDiff.whereErrorA || aggregateDiff.whereErrorB) && (
+                  <div className="p-2.5 bg-rose-950/40 border border-rose-500/40 rounded-lg text-rose-300 text-xs flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-semibold">WHERE Syntax Notice: </span>
+                      {aggregateDiff.whereErrorA && (
+                        <span>Source A: &quot;{aggregateDiff.whereErrorA}&quot;. </span>
+                      )}
+                      {aggregateDiff.whereErrorB && (
+                        <span>Target B: &quot;{aggregateDiff.whereErrorB}&quot;. </span>
+                      )}
+                      <span className="text-rose-200/80">
+                        Check quotes and column names. Unfiltered data is displayed while editing.
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Quick Suggestion Chips & Operator Helper Buttons */}
+                <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-[#142342]">
+                  <span className="text-[10px] uppercase font-semibold text-slate-500 tracking-wider">
+                    Quick Filters:
+                  </span>
+                  {quickWhereSuggestions.map((suggestion, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => {
+                        const targetVal = aggWhereA.trim()
+                          ? `${aggWhereA} AND ${suggestion}`
+                          : suggestion;
+                        setAggWhereA(targetVal);
+                        if (isSeparateWhere) {
+                          const targetValB = aggWhereB.trim()
+                            ? `${aggWhereB} AND ${suggestion}`
+                            : suggestion;
+                          setAggWhereB(targetValB);
+                        }
+                      }}
+                      className="px-2 py-0.5 bg-[#0f1d38] hover:bg-[#182c54] border border-[#1e3668] hover:border-blue-500/60 text-[11px] font-mono text-blue-300 rounded transition cursor-pointer flex items-center gap-1"
+                      title={`Click to add "${suggestion}"`}
+                    >
+                      <Plus className="w-2.5 h-2.5 text-blue-400" />
+                      <span>{suggestion}</span>
+                    </button>
+                  ))}
+
+                  {/* Operator Helpers */}
+                  <div className="flex items-center gap-1 ml-auto">
+                    {['AND', 'OR', 'NOT', 'LIKE', 'IS NOT NULL'].map((op) => (
+                      <button
+                        key={op}
+                        type="button"
+                        onClick={() => {
+                          const appendedA = aggWhereA.trim()
+                            ? `${aggWhereA} ${op} `
+                            : `${op} `;
+                          setAggWhereA(appendedA);
+                          if (isSeparateWhere) {
+                            const appendedB = aggWhereB.trim()
+                              ? `${aggWhereB} ${op} `
+                              : `${op} `;
+                            setAggWhereB(appendedB);
+                          }
+                        }}
+                        className="px-1.5 py-0.5 bg-slate-900/80 hover:bg-slate-800 text-[10px] font-mono text-slate-400 hover:text-slate-200 border border-slate-700/60 rounded cursor-pointer transition"
+                      >
+                        {op}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
               {/* Scope Description */}
               <div className="flex flex-wrap items-center justify-between text-xs text-slate-400 gap-2">
                 <div>
-                  Comparing <span className="font-mono text-slate-200 font-bold">{aggFunction}({effectiveAggMeasureKey})</span> grouped by <span className="font-mono text-blue-300 font-bold">{effectiveAggDimensions.join(' + ') || 'All Rows'}</span> between <span className="text-blue-400 font-semibold">{tableA?.name}</span> and <span className="text-emerald-400 font-semibold">{tableB?.name}</span>.
+                  Comparing <span className="font-mono text-slate-200 font-bold">{aggFunction}({effectiveAggMeasureKey})</span> grouped by <span className="font-mono text-blue-300 font-bold">{effectiveAggDimensions.join(' + ') || 'All Rows'}</span> between <span className="text-blue-400 font-semibold">{tableA?.name}</span> and <span className="text-emerald-400 font-semibold">{tableB?.name}</span>
+                  {(aggregateDiff.whereClauseA || aggregateDiff.whereClauseB) && (
+                    <span className="ml-1 text-amber-300 font-medium">
+                      (filtered: {aggregateDiff.filteredRowsCountA ?? dataA.length}/{dataA.length} in A, {aggregateDiff.filteredRowsCountB ?? dataB.length}/{dataB.length} in B)
+                    </span>
+                  )}.
                 </div>
                 <div className="text-[11px] text-slate-500">
                   {aggregateDiff.totalGroups} distinct dimension groups analyzed
@@ -2087,7 +2366,18 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
                         )}
                       </td>
                       <td className="py-3 px-4 text-center tabular-nums text-slate-300 text-[11px]">
-                        {dataA.length} / {dataB.length}
+                        {aggregateDiff.whereClauseA || aggregateDiff.whereClauseB ? (
+                          <div className="flex flex-col items-center leading-tight">
+                            <span className="text-amber-300 font-bold">
+                              {aggregateDiff.filteredRowsCountA ?? dataA.length} / {aggregateDiff.filteredRowsCountB ?? dataB.length}
+                            </span>
+                            <span className="text-[10px] text-slate-500 font-normal">
+                              of {dataA.length} / {dataB.length}
+                            </span>
+                          </div>
+                        ) : (
+                          `${dataA.length} / ${dataB.length}`
+                        )}
                       </td>
                     </tr>
                   </tfoot>
@@ -2111,9 +2401,17 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
                       </span>
                     )}
                     {reconciliationType === 'aggregate' && aggregateDiff && (
-                      <span className="text-xs font-normal font-mono px-2 py-0.5 rounded-md bg-emerald-950 text-emerald-300 border border-emerald-800">
-                        {aggregateDiff.measureAgg}({aggregateDiff.measureCol}) by {aggregateDiff.dimensions.join(' + ') || 'All'}
-                      </span>
+                      <>
+                        <span className="text-xs font-normal font-mono px-2 py-0.5 rounded-md bg-emerald-950 text-emerald-300 border border-emerald-800">
+                          {aggregateDiff.measureAgg}({aggregateDiff.measureCol}) by {aggregateDiff.dimensions.join(' + ') || 'All'}
+                        </span>
+                        {(aggregateDiff.whereClauseA || aggregateDiff.whereClauseB) && (
+                          <span className="text-xs font-normal font-mono px-2 py-0.5 rounded-md bg-amber-950 text-amber-300 border border-amber-800 flex items-center gap-1">
+                            <Filter className="w-3 h-3 text-amber-400" />
+                            <span>WHERE Filtered</span>
+                          </span>
+                        )}
+                      </>
                     )}
                   </h3>
                   <p className="text-xs text-slate-400 mt-0.5">

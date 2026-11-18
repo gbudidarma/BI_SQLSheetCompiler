@@ -212,6 +212,12 @@ export interface AggregateDiffResult {
   measurePair?: KeyPair;
   measureAgg: AggregateFunction;
   tolerance: number;
+  whereClauseA?: string;
+  whereClauseB?: string;
+  whereErrorA?: string;
+  whereErrorB?: string;
+  filteredRowsCountA?: number;
+  filteredRowsCountB?: number;
   rows: AggregateDiffRow[];
   totalGroups: number;
   balancedGroups: number;
