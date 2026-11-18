@@ -110,7 +110,7 @@ export const TopBar: React.FC<TopBarProps> = ({
 
   return (
     <>
-      <header className="flex items-center justify-between gap-2 sm:gap-4 px-2.5 sm:px-5 py-2 sm:py-2.5 bg-[#0b1329] border-b border-[#182747] shrink-0 z-30 shadow-md">
+      <header className="relative z-40 flex items-center justify-between gap-2 sm:gap-4 px-2.5 sm:px-5 py-2 sm:py-2.5 bg-[#0b1329] border-b border-[#182747] shrink-0 shadow-md">
         {/* Zone 1: Brand title & Desktop View Switcher */}
         <div className="flex items-center gap-2 sm:gap-5 shrink-0 min-w-max md:min-w-0 md:flex-1">
           <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 select-none">
@@ -279,7 +279,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                 ? 'bg-[#14264d] border-blue-500/50 text-white ring-2 ring-blue-500/20'
                 : 'text-slate-300 hover:text-white bg-[#0e1b38] hover:bg-[#14264d] border-[#1d3361]'
             }`}
-            title="Help, Guides, All Menu Reference, Syntax, Shortcuts & History"
+            title={moreMenuOpen ? undefined : "Help, Guides, All Menu Reference, Syntax, Shortcuts & History"}
             aria-expanded={moreMenuOpen}
           >
             <HelpCircle className="w-3.5 h-3.5 text-blue-400" />
@@ -289,7 +289,7 @@ export const TopBar: React.FC<TopBarProps> = ({
 
           {/* More Menu Dropdown Popover */}
           {moreMenuOpen && (
-            <div className="absolute right-0 mt-2 w-72 rounded-xl bg-[#0c162e] border border-[#1b315e] p-1.5 shadow-2xl z-50 animate-in fade-in slide-in-from-top-1 duration-150">
+            <div className="absolute right-0 top-full mt-2 w-72 rounded-xl bg-[#0c162e] border border-[#1b315e] p-1.5 shadow-2xl z-50 animate-in fade-in slide-in-from-top-1 duration-150">
               <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-[#162544] mb-1">
                 Help & Documentation
               </div>
@@ -509,7 +509,7 @@ export const TopBar: React.FC<TopBarProps> = ({
 
       {/* Mobile Drawer / Dropdown Menu */}
       {mobileMenuOpen && (
-        <div className="lg:hidden bg-[#0c162e] border-b border-[#1b315e] p-3 shadow-2xl z-40 animate-in slide-in-from-top duration-150">
+        <div className="relative z-40 lg:hidden bg-[#0c162e] border-b border-[#1b315e] p-3 shadow-2xl animate-in slide-in-from-top duration-150">
           <div className="grid grid-cols-2 gap-2 text-xs">
             <button
               onClick={() => {

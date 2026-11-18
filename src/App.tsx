@@ -317,7 +317,7 @@ export default function App() {
       />
 
       {/* Primary View Router */}
-      <div className="flex-1 flex min-h-0 overflow-hidden relative">
+      <div className="flex-1 flex min-h-0 overflow-hidden relative z-0">
         {/* VIEW 1: SQL STUDIO (Sidebar + Editor + Results) */}
         {activeView === 'studio' && (
           <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden">
