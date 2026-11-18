@@ -17,10 +17,19 @@ import {
   Database,
   Key,
   Plus,
-  ArrowRight
+  ArrowRight,
+  BarChart3,
+  Calculator,
+  Download,
+  Sliders,
 } from 'lucide-react';
-import { TableSchema } from '../types';
-import { compareSchemas, compareData, autoDetectKeyColumn } from '../utils/schemaComparator';
+import { TableSchema, AggregateFunction } from '../types';
+import {
+  compareSchemas,
+  compareData,
+  autoDetectKeyColumn,
+  compareAggregateData,
+} from '../utils/schemaComparator';
 import { highlightSql } from '../utils/sqlHighlighter';
 import { useTheme } from '../context/ThemeContext';
 
@@ -51,11 +60,21 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
     return initialTableB || tables[1]?.name || tables[0]?.name || '';
   });
 
-  const [activeTab, setActiveTab] = useState<'schema' | 'data' | 'reconciliation'>('schema');
+  const [activeTab, setActiveTab] = useState<'schema' | 'data' | 'aggregate' | 'reconciliation'>('schema');
   const [customKeyCols, setCustomKeyCols] = useState<string[]>([]);
   const [dataFilter, setDataFilter] = useState<'all' | 'modified' | 'only_a' | 'only_b' | 'identical'>('all');
   const [copiedSql, setCopiedSql] = useState(false);
+  const [copiedAggSql, setCopiedAggSql] = useState(false);
   const [searchFilter, setSearchFilter] = useState('');
+
+  // Aggregate Summary State
+  const [customAggDimensions, setCustomAggDimensions] = useState<string[]>([]);
+  const [aggMeasure, setAggMeasure] = useState<string>('');
+  const [aggFunction, setAggFunction] = useState<AggregateFunction>('SUM');
+  const [aggTolerance, setAggTolerance] = useState<number>(0);
+  const [aggFilter, setAggFilter] = useState<'all' | 'alerts' | 'balanced' | 'only_a' | 'only_b'>('all');
+  const [aggSearch, setAggSearch] = useState<string>('');
+  const [reconciliationType, setReconciliationType] = useState<'row' | 'aggregate'>('row');
 
   // Keep selection synchronized with available tables
   React.useEffect(() => {
@@ -144,6 +163,140 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
     const temp = selectedTableAName;
     setSelectedTableAName(selectedTableBName);
     setSelectedTableBName(temp);
+  };
+
+  // Candidate measures for aggregate summary
+  const candidateMeasures = useMemo(() => {
+    const list: string[] = ['*'];
+    if (!tableA || !tableB) return list;
+
+    // First add columns that look like measures or have numeric types
+    commonColumns.forEach((colName) => {
+      const colA = tableA.columns.find((c) => c.name.toLowerCase() === colName.toLowerCase());
+      const isNumType = colA && (colA.type === 'INTEGER' || colA.type === 'FLOAT');
+      const isNumName = /(qty|quantity|amount|total|price|cost|sales|rev|revenue|count|sum|balance|score|rate|val|value)/i.test(colName);
+      if (isNumType || isNumName) {
+        list.push(colName);
+      }
+    });
+
+    // Then add other common columns
+    commonColumns.forEach((colName) => {
+      if (!list.includes(colName)) {
+        list.push(colName);
+      }
+    });
+
+    return list;
+  }, [commonColumns, tableA, tableB]);
+
+  // Effective dimensions for aggregate comparison
+  const effectiveAggDimensions = useMemo(() => {
+    const validCustom = customAggDimensions.filter((col) => commonColumns.includes(col));
+    if (validCustom.length > 0) return validCustom;
+    // Default to effective identity keys if available
+    if (effectiveKeys.length > 0) return effectiveKeys;
+    // Fallback to first non-measure common column
+    const nonMeasure = commonColumns.find((c) => !candidateMeasures.slice(1).includes(c));
+    return nonMeasure ? [nonMeasure] : (commonColumns.length > 0 ? [commonColumns[0]] : []);
+  }, [customAggDimensions, commonColumns, effectiveKeys, candidateMeasures]);
+
+  const effectiveAggMeasure = useMemo(() => {
+    if (aggMeasure && (aggMeasure === '*' || commonColumns.includes(aggMeasure))) {
+      return aggMeasure;
+    }
+    const firstNum = candidateMeasures.find((m) => m !== '*' && !effectiveAggDimensions.includes(m));
+    return firstNum || (candidateMeasures.length > 1 ? candidateMeasures[1] : '*');
+  }, [aggMeasure, commonColumns, candidateMeasures, effectiveAggDimensions]);
+
+  const availableAddAggDimensions = useMemo(() => {
+    return commonColumns.filter((col) => !effectiveAggDimensions.includes(col) && col !== effectiveAggMeasure);
+  }, [commonColumns, effectiveAggDimensions, effectiveAggMeasure]);
+
+  // Aggregate diff result
+  const aggregateDiff = useMemo(() => {
+    if (!tableA || !tableB) return null;
+    return compareAggregateData(
+      tableA,
+      dataA,
+      tableB,
+      dataB,
+      effectiveAggDimensions,
+      effectiveAggMeasure,
+      aggFunction,
+      aggTolerance
+    );
+  }, [tableA, dataA, tableB, dataB, effectiveAggDimensions, effectiveAggMeasure, aggFunction, aggTolerance]);
+
+  // Filtered rows for aggregate comparison tab
+  const filteredAggRows = useMemo(() => {
+    if (!aggregateDiff?.rows) return [];
+    let rows = aggregateDiff.rows;
+
+    if (aggFilter === 'alerts') {
+      rows = rows.filter((r) => r.status === 'variance_alert');
+    } else if (aggFilter === 'balanced') {
+      rows = rows.filter((r) => r.status === 'balanced');
+    } else if (aggFilter === 'only_a') {
+      rows = rows.filter((r) => r.status === 'only_a');
+    } else if (aggFilter === 'only_b') {
+      rows = rows.filter((r) => r.status === 'only_b');
+    }
+
+    if (aggSearch.trim()) {
+      const term = aggSearch.toLowerCase();
+      rows = rows.filter((r) => {
+        if (r.dimensionKey.toLowerCase().includes(term)) return true;
+        return Object.values(r.dimensionValues).some((v) => String(v).toLowerCase().includes(term));
+      });
+    }
+
+    return rows;
+  }, [aggregateDiff, aggFilter, aggSearch]);
+
+  const handleExportAggCsv = () => {
+    if (!aggregateDiff || !tableA || !tableB) return;
+    const measureLabel = `${aggregateDiff.measureAgg}_${aggregateDiff.measureCol}`;
+    const headerCols = [
+      ...aggregateDiff.dimensions,
+      'Reconciliation_Status',
+      `${tableA.name}_${measureLabel}`,
+      `${tableB.name}_${measureLabel}`,
+      'Variance_Delta',
+      'Percent_Delta',
+      `${tableA.name}_RowCount`,
+      `${tableB.name}_RowCount`,
+    ];
+    const rows = aggregateDiff.rows.map((r) => {
+      const dimCells = aggregateDiff.dimensions.map((d) => `"${String(r.dimensionValues[d] ?? '').replace(/"/g, '""')}"`);
+      return [
+        ...dimCells,
+        r.status,
+        r.valA !== null ? r.valA : '',
+        r.valB !== null ? r.valB : '',
+        r.delta !== null ? r.delta : '',
+        r.percentDelta !== null ? `${r.percentDelta}%` : '',
+        r.countA,
+        r.countB,
+      ].join(',');
+    });
+    const csvContent = [headerCols.join(','), ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `aggregate_reconciliation_${tableA.name}_vs_${tableB.name}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleCopyAggSql = () => {
+    if (!aggregateDiff?.reconciliationSql) return;
+    navigator.clipboard.writeText(aggregateDiff.reconciliationSql);
+    setCopiedAggSql(true);
+    setTimeout(() => setCopiedAggSql(false), 2000);
   };
 
   const handleCopySql = () => {
@@ -272,6 +425,29 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
                 }`}
               >
                 {dataDiff.modifiedCount}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setActiveTab('aggregate')}
+            className={`px-2.5 sm:px-3 py-1.5 font-medium rounded-md transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
+              activeTab === 'aggregate'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <BarChart3 className="w-3.5 h-3.5" />
+            <span><span className="hidden sm:inline">Aggregate </span>Summary</span>
+            {aggregateDiff && (
+              <span
+                className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                  aggregateDiff.varianceAlerts > 0
+                    ? 'bg-amber-950 text-amber-300 border border-amber-600/50 font-bold'
+                    : 'bg-emerald-950 text-emerald-300'
+                }`}
+                title={aggregateDiff.varianceAlerts > 0 ? `${aggregateDiff.varianceAlerts} aggregate variance alert(s)` : `${aggregateDiff.matchRate}% match rate`}
+              >
+                {aggregateDiff.varianceAlerts > 0 ? `⚠️ ${aggregateDiff.varianceAlerts}` : `${aggregateDiff.matchRate}%`}
               </span>
             )}
           </button>
@@ -897,35 +1073,688 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
           </div>
         )}
 
-        {/* TAB 3: RECONCILIATION SQL */}
-        {activeTab === 'reconciliation' && dataDiff && (
+        {/* TAB 3: AGGREGATE SUMMARY (DIMENSIONAL COMPARISON) */}
+        {activeTab === 'aggregate' && aggregateDiff && (
+          <div className="space-y-6 max-w-6xl mx-auto">
+            {/* Dimension & Measure Aggregation Controls */}
+            <div className="bg-[#0b162f] p-4 rounded-xl border border-[#182c54] space-y-3.5">
+              <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[#142447]">
+                {/* Dimensions Configuration */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-300">
+                    <Sliders className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                    <span>Group By Dimension(s):</span>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {effectiveAggDimensions.map((dim, idx) => (
+                      <div
+                        key={dim}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-950/80 border border-blue-500/50 text-xs font-mono text-blue-200 shadow-xs"
+                      >
+                        {idx > 0 && <span className="text-blue-400 font-sans font-bold text-[10px] mr-0.5">+</span>}
+                        <span>{dim}</span>
+                        {effectiveAggDimensions.length > 1 ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCustomAggDimensions(effectiveAggDimensions.filter((d) => d !== dim));
+                            }}
+                            className="p-0.5 hover:bg-blue-800/60 rounded text-blue-300 hover:text-white transition cursor-pointer"
+                            title={`Remove ${dim} from dimensions`}
+                            aria-label={`Remove ${dim}`}
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        ) : null}
+                      </div>
+                    ))}
+
+                    {/* Add Dimension Dropdown */}
+                    {availableAddAggDimensions.length > 0 && (
+                      <select
+                        value=""
+                        onChange={(e) => {
+                          if (e.target.value) {
+                            setCustomAggDimensions([...effectiveAggDimensions, e.target.value]);
+                          }
+                        }}
+                        className="bg-[#070e1c] hover:bg-[#0c1830] border border-dashed border-blue-500/40 hover:border-blue-400 text-xs text-blue-300 font-medium rounded-lg px-2.5 py-1 focus:outline-none cursor-pointer transition shadow-xs"
+                        title="Add dimension to group by (e.g. customer + order_date)"
+                      >
+                        <option value="" disabled>+ Add Dimension...</option>
+                        {availableAddAggDimensions.map((col) => (
+                          <option key={col} value={col}>+ {col}</option>
+                        ))}
+                      </select>
+                    )}
+
+                    {/* Single Dimension Quick Switcher */}
+                    {effectiveAggDimensions.length === 1 && (
+                      <select
+                        value={effectiveAggDimensions[0]}
+                        onChange={(e) => setCustomAggDimensions([e.target.value])}
+                        className="bg-[#070e1c] border border-[#1b315e] text-xs text-slate-300 font-mono rounded-lg px-2 py-1 focus:outline-none focus:border-blue-500 cursor-pointer"
+                        title="Switch primary dimension"
+                      >
+                        {commonColumns
+                          .filter((c) => c !== effectiveAggMeasure)
+                          .map((col) => (
+                            <option key={col} value={col}>
+                              Switch to: {col}
+                            </option>
+                          ))}
+                      </select>
+                    )}
+
+                    {/* Reset Button */}
+                    {customAggDimensions.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setCustomAggDimensions([])}
+                        className="text-[11px] text-slate-400 hover:text-blue-300 underline cursor-pointer ml-1"
+                        title="Reset to default dimensions"
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Measure & Function Selector */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-300">
+                    <Calculator className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <span>Aggregate Metric:</span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    {/* Function */}
+                    <select
+                      value={aggFunction}
+                      onChange={(e) => setAggFunction(e.target.value as AggregateFunction)}
+                      className="bg-[#070e1c] border border-[#1b315e] text-xs text-emerald-300 font-bold font-mono rounded-lg px-2.5 py-1 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                      title="Aggregation function"
+                    >
+                      <option value="SUM">SUM</option>
+                      <option value="COUNT">COUNT</option>
+                      <option value="AVG">AVG</option>
+                      <option value="MIN">MIN</option>
+                      <option value="MAX">MAX</option>
+                    </select>
+
+                    <span className="text-slate-500 font-mono text-xs">(</span>
+
+                    {/* Column */}
+                    <select
+                      value={effectiveAggMeasure}
+                      onChange={(e) => setAggMeasure(e.target.value)}
+                      className="bg-[#070e1c] border border-[#1b315e] text-xs text-slate-200 font-mono rounded-lg px-2.5 py-1 focus:outline-none focus:border-blue-500 cursor-pointer max-w-[180px]"
+                      title="Measure column to aggregate"
+                    >
+                      {candidateMeasures.map((col) => (
+                        <option key={col} value={col}>
+                          {col === '*' ? '* (Row Count)' : col}
+                        </option>
+                      ))}
+                    </select>
+
+                    <span className="text-slate-500 font-mono text-xs">)</span>
+                  </div>
+
+                  {/* Tolerance */}
+                  <div className="flex items-center gap-1.5 ml-2 pl-2 border-l border-[#1b315e]">
+                    <span className="text-[11px] text-slate-400">Tolerance:</span>
+                    <select
+                      value={aggTolerance}
+                      onChange={(e) => setAggTolerance(Number(e.target.value))}
+                      className="bg-[#070e1c] border border-[#1b315e] text-xs text-slate-300 rounded-lg px-2 py-1 focus:outline-none cursor-pointer"
+                      title="Tolerance threshold for discrepancy alert"
+                    >
+                      <option value="0">0 (Exact Match)</option>
+                      <option value="0.001">±0.001 (Decimal)</option>
+                      <option value="0.01">±0.01 (Cents)</option>
+                      <option value="1">±1.0 (Unit)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Scope Description */}
+              <div className="flex flex-wrap items-center justify-between text-xs text-slate-400 gap-2">
+                <div>
+                  Comparing <span className="font-mono text-slate-200 font-bold">{aggFunction}({effectiveAggMeasure})</span> grouped by <span className="font-mono text-blue-300 font-bold">{effectiveAggDimensions.join(' + ') || 'All Rows'}</span> between <span className="text-blue-400 font-semibold">{tableA?.name}</span> and <span className="text-emerald-400 font-semibold">{tableB?.name}</span>.
+                </div>
+                <div className="text-[11px] text-slate-500">
+                  {aggregateDiff.totalGroups} distinct dimension groups analyzed
+                </div>
+              </div>
+            </div>
+
+            {/* VALUE DISCREPANCY ALERT BANNER */}
+            {aggregateDiff.varianceAlerts > 0 ? (
+              <div className="p-4 rounded-xl border bg-gradient-to-r from-amber-950/60 via-[#1f1409]/70 to-[#0b162f] border-amber-500/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg animate-in fade-in">
+                <div className="flex items-start sm:items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-amber-500/20 border border-amber-500/50 flex items-center justify-center text-amber-400 shrink-0">
+                    <AlertTriangle className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-bold text-amber-200 flex items-center gap-2 flex-wrap">
+                      <span>Aggregate Variance Alert: {aggregateDiff.varianceAlerts} group(s) have differing aggregate totals!</span>
+                      <span className="text-[10px] bg-amber-500/25 text-amber-300 px-2 py-0.5 rounded font-mono font-bold border border-amber-500/40">
+                        DIFFERENCE DETECTED
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-300 mt-1">
+                      Aggregated metric <span className="font-mono font-bold text-amber-300">{aggFunction}({effectiveAggMeasure})</span> differs between <span className="text-blue-300 font-semibold">{tableA?.name}</span> and <span className="text-emerald-300 font-semibold">{tableB?.name}</span>. Net variance: <span className="font-mono font-bold text-amber-200">Δ {aggregateDiff.totalDelta > 0 ? `+${aggregateDiff.totalDelta.toLocaleString()}` : aggregateDiff.totalDelta.toLocaleString()}</span>{aggregateDiff.percentTotalDelta !== null ? ` (${aggregateDiff.percentTotalDelta > 0 ? '+' : ''}${aggregateDiff.percentTotalDelta}%)` : ''}.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setAggFilter(aggFilter === 'alerts' ? 'all' : 'alerts')}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs ${
+                      aggFilter === 'alerts'
+                        ? 'bg-amber-500 text-slate-950 ring-2 ring-amber-400/50'
+                        : 'bg-amber-600/30 hover:bg-amber-600/50 text-amber-200 border border-amber-500/40'
+                    }`}
+                  >
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    <span>{aggFilter === 'alerts' ? 'Showing Alerts Only' : `View ${aggregateDiff.varianceAlerts} Alerts Only`}</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="p-3.5 rounded-xl border bg-emerald-950/20 border-emerald-500/30 flex items-center justify-between gap-3 text-xs text-emerald-300">
+                <div className="flex items-center gap-2.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>Zero Aggregate Discrepancies: All {aggregateDiff.totalGroups} groups have matching totals across both tables for {aggFunction}({effectiveAggMeasure}).</span>
+                </div>
+                <span className="text-[10px] font-mono font-bold bg-emerald-900/60 text-emerald-300 px-2 py-0.5 rounded border border-emerald-700/50">
+                  100% RECONCILED
+                </span>
+              </div>
+            )}
+
+            {/* Aggregate Diff KPI Summary Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div className="bg-[#0b162f] border border-[#182c54] rounded-xl p-4">
+                <div className="text-xs text-slate-400">Group Match Rate</div>
+                <div className="text-2xl font-bold font-mono text-emerald-400 mt-1">
+                  {aggregateDiff.matchRate}%
+                </div>
+                <div className="text-[11px] text-slate-500 mt-0.5">
+                  {aggregateDiff.balancedGroups} of {aggregateDiff.totalGroups} groups balanced
+                </div>
+              </div>
+
+              <div
+                onClick={() => {
+                  if (aggregateDiff.varianceAlerts > 0) {
+                    setAggFilter(aggFilter === 'alerts' ? 'all' : 'alerts');
+                  }
+                }}
+                className={`border rounded-xl p-4 transition ${
+                  aggregateDiff.varianceAlerts > 0
+                    ? 'bg-amber-950/25 border-amber-500/50 cursor-pointer hover:bg-amber-950/40 ring-1 ring-amber-500/30'
+                    : 'bg-[#0b162f] border-[#182c54]'
+                }`}
+                title={aggregateDiff.varianceAlerts > 0 ? 'Click to toggle value alert groups' : ''}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="text-xs text-slate-400">Variance Alerts</div>
+                  {aggregateDiff.varianceAlerts > 0 && (
+                    <span className="text-[10px] uppercase font-bold text-amber-300 bg-amber-500/20 px-1.5 py-0.2 rounded border border-amber-500/40 flex items-center gap-1">
+                      <AlertTriangle className="w-2.5 h-2.5 text-amber-400" />
+                      <span>Alerts</span>
+                    </span>
+                  )}
+                </div>
+                <div className={`text-2xl font-bold font-mono mt-1 ${aggregateDiff.varianceAlerts > 0 ? 'text-amber-400' : 'text-slate-300'}`}>
+                  {aggregateDiff.varianceAlerts}
+                </div>
+                <div className="text-[11px] text-slate-500 mt-0.5">
+                  Groups with different totals
+                </div>
+              </div>
+
+              <div className="bg-[#0b162f] border border-[#182c54] rounded-xl p-4">
+                <div className="text-xs text-slate-400">Total Net Variance (Δ)</div>
+                <div
+                  className={`text-2xl font-bold font-mono mt-1 ${
+                    aggregateDiff.totalDelta === 0
+                      ? 'text-emerald-400'
+                      : aggregateDiff.totalDelta > 0
+                      ? 'text-emerald-400'
+                      : 'text-rose-400'
+                  }`}
+                >
+                  Δ {aggregateDiff.totalDelta > 0 ? `+${aggregateDiff.totalDelta.toLocaleString()}` : aggregateDiff.totalDelta.toLocaleString()}
+                </div>
+                <div className="text-[11px] text-slate-500 mt-0.5">
+                  {aggregateDiff.percentTotalDelta !== null ? `${aggregateDiff.percentTotalDelta > 0 ? '+' : ''}${aggregateDiff.percentTotalDelta}% net shift` : 'B minus A'}
+                </div>
+              </div>
+
+              <div className="bg-[#0b162f] border border-[#182c54] rounded-xl p-4">
+                <div className="text-xs text-slate-400">Totals Compared</div>
+                <div className="text-xs font-mono font-semibold text-slate-200 mt-1 flex flex-col gap-0.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-blue-400 font-bold truncate max-w-[80px]">{tableA?.name}:</span>
+                    <span className="tabular-nums">{aggregateDiff.totalValA.toLocaleString()}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-emerald-400 font-bold truncate max-w-[80px]">{tableB?.name}:</span>
+                    <span className="tabular-nums">{aggregateDiff.totalValB.toLocaleString()}</span>
+                  </div>
+                </div>
+                <div className="text-[11px] text-slate-500 mt-1">
+                  Sum of all group aggregates
+                </div>
+              </div>
+            </div>
+
+            {/* Filter, Search & Export Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-3 bg-[#0b162f] p-3 rounded-xl border border-[#182c54]">
+              {/* Filter Pills */}
+              <div className="flex flex-wrap items-center gap-1.5 p-1 bg-[#070e1c] rounded-lg border border-[#182c54] text-xs">
+                <button
+                  type="button"
+                  onClick={() => setAggFilter('all')}
+                  className={`px-2.5 py-1 rounded transition cursor-pointer font-medium ${
+                    aggFilter === 'all' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  All ({aggregateDiff.totalGroups})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAggFilter('alerts')}
+                  className={`px-2.5 py-1 rounded transition cursor-pointer font-medium flex items-center gap-1.5 ${
+                    aggFilter === 'alerts'
+                      ? 'bg-amber-600 text-white font-bold shadow-xs'
+                      : aggregateDiff.varianceAlerts > 0
+                      ? 'bg-amber-950/80 text-amber-300 border border-amber-600/50 hover:bg-amber-900/60'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  {aggregateDiff.varianceAlerts > 0 && <AlertTriangle className="w-3 h-3 text-amber-400" />}
+                  <span>Alerts ({aggregateDiff.varianceAlerts})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAggFilter('balanced')}
+                  className={`px-2.5 py-1 rounded transition cursor-pointer font-medium ${
+                    aggFilter === 'balanced' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Balanced ({aggregateDiff.balancedGroups})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAggFilter('only_a')}
+                  className={`px-2.5 py-1 rounded transition cursor-pointer font-medium ${
+                    aggFilter === 'only_a' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Only in {tableA?.name} ({aggregateDiff.onlyInAGroups})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAggFilter('only_b')}
+                  className={`px-2.5 py-1 rounded transition cursor-pointer font-medium ${
+                    aggFilter === 'only_b' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Only in {tableB?.name} ({aggregateDiff.onlyInBGroups})
+                </button>
+              </div>
+
+              {/* Search & Actions */}
+              <div className="flex items-center gap-2 flex-1 sm:flex-initial">
+                <div className="flex items-center gap-2 bg-[#070e1c] px-3 py-1.5 rounded-lg border border-[#182c54] flex-1 sm:w-64">
+                  <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  <input
+                    type="text"
+                    placeholder="Search dimension..."
+                    value={aggSearch}
+                    onChange={(e) => setAggSearch(e.target.value)}
+                    className="bg-transparent text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none flex-1 font-mono"
+                  />
+                  {aggSearch && (
+                    <button
+                      onClick={() => setAggSearch('')}
+                      className="text-xs text-slate-400 hover:text-white"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleExportAggCsv}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0e1b38] hover:bg-[#182c54] border border-[#1e3668] text-xs font-medium text-slate-200 rounded-lg transition cursor-pointer"
+                  title="Export aggregate reconciliation table to CSV"
+                >
+                  <Download className="w-3.5 h-3.5 text-blue-400" />
+                  <span className="hidden sm:inline">Export CSV</span>
+                </button>
+
+                {onExecuteQuery && (
+                  <button
+                    type="button"
+                    onClick={() => onExecuteQuery(aggregateDiff.reconciliationSql)}
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-xs font-semibold text-white rounded-lg transition shadow-xs cursor-pointer"
+                    title="Open and run this aggregate reconciliation query in SQL Studio"
+                  >
+                    <Play className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Execute in SQL Studio</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Aggregate Summary Table */}
+            <div className="bg-[#0b162f] border border-[#182c54] rounded-xl overflow-hidden shadow-lg">
+              <div className="p-4 border-b border-[#182c54] flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-100 flex items-center gap-2">
+                    <span>Grouped Aggregate Comparison</span>
+                    <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800">
+                      Metric: {aggFunction}({effectiveAggMeasure})
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Variance Δ = Target (B) - Source (A). Discrepancies highlighted with ⚠️ alerts.
+                  </p>
+                </div>
+                <span className="text-xs font-mono text-slate-400">
+                  Showing {filteredAggRows.length} of {aggregateDiff.rows.length} groups
+                </span>
+              </div>
+
+              <div className="overflow-x-auto max-h-[500px]">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead className="sticky top-0 bg-[#081022] z-10 border-b border-[#182c54] text-slate-400 font-semibold uppercase tracking-wider text-[10px]">
+                    <tr>
+                      <th className="py-2.5 px-4 font-mono">
+                        Dimension ({effectiveAggDimensions.join(' + ') || 'All'})
+                      </th>
+                      <th className="py-2.5 px-4">Status</th>
+                      <th className="py-2.5 px-4 text-right">
+                        Source ({tableA?.name}) Total
+                      </th>
+                      <th className="py-2.5 px-4 text-right">
+                        Target ({tableB?.name}) Total
+                      </th>
+                      <th className="py-2.5 px-4 text-right">
+                        Variance (Δ)
+                      </th>
+                      <th className="py-2.5 px-4 text-right">
+                        % Variance
+                      </th>
+                      <th className="py-2.5 px-4 text-center">
+                        Row Counts (A / B)
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#142342] font-mono">
+                    {filteredAggRows.map((row, idx) => {
+                      const isAlert = row.status === 'variance_alert';
+                      const isBalanced = row.status === 'balanced';
+                      const isOnlyA = row.status === 'only_a';
+                      const isOnlyB = row.status === 'only_b';
+
+                      return (
+                        <tr
+                          key={idx}
+                          className={`hover:bg-[#0f1d3a] transition-colors ${
+                            isAlert
+                              ? 'bg-amber-950/25 border-l-2 border-l-amber-500'
+                              : isOnlyA
+                              ? 'bg-blue-950/20'
+                              : isOnlyB
+                              ? 'bg-emerald-950/20'
+                              : ''
+                          }`}
+                        >
+                          {/* Dimension Key */}
+                          <td className="py-2.5 px-4 font-bold text-slate-100">
+                            {row.dimensionKey.includes(' | ') ? (
+                              <span className="inline-flex items-center gap-1.5 flex-wrap">
+                                {row.dimensionKey.split(' | ').map((part, pIdx) => (
+                                  <span key={pIdx} className="inline-flex items-center gap-1.5">
+                                    {pIdx > 0 && <span className="text-slate-500 font-normal">|</span>}
+                                    <span className="bg-slate-800/60 px-1.5 py-0.5 rounded text-blue-200 border border-slate-700/50">
+                                      {part}
+                                    </span>
+                                  </span>
+                                ))}
+                              </span>
+                            ) : (
+                              <span className="text-blue-200">{row.dimensionKey}</span>
+                            )}
+                          </td>
+
+                          {/* Status */}
+                          <td className="py-2.5 px-4 whitespace-nowrap">
+                            {isAlert ? (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold bg-amber-950/90 text-amber-300 border border-amber-500/60 shadow-xs">
+                                <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
+                                <span>Variance Alert</span>
+                              </span>
+                            ) : isBalanced ? (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold bg-emerald-950/80 text-emerald-300 border border-emerald-600/50">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                                <span>Balanced</span>
+                              </span>
+                            ) : isOnlyA ? (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-950 text-blue-300 border border-blue-800">
+                                Only in {tableA?.name}
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-800">
+                                Only in {tableB?.name}
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Source Value A */}
+                          <td className="py-2.5 px-4 text-right tabular-nums">
+                            {row.valA !== null ? (
+                              <span className={isAlert ? 'text-amber-200 font-bold bg-amber-950/40 px-1.5 py-0.5 rounded' : 'text-slate-300'}>
+                                {row.valA.toLocaleString()}
+                              </span>
+                            ) : (
+                              <span className="text-slate-600 italic">—</span>
+                            )}
+                          </td>
+
+                          {/* Target Value B */}
+                          <td className="py-2.5 px-4 text-right tabular-nums">
+                            {row.valB !== null ? (
+                              <span className={isAlert ? 'text-emerald-300 font-bold bg-emerald-950/50 px-1.5 py-0.5 rounded' : 'text-slate-300'}>
+                                {row.valB.toLocaleString()}
+                              </span>
+                            ) : (
+                              <span className="text-slate-600 italic">—</span>
+                            )}
+                          </td>
+
+                          {/* Variance Delta (Δ) */}
+                          <td className="py-2.5 px-4 text-right tabular-nums font-bold">
+                            {row.delta !== null ? (
+                              <span
+                                className={`inline-block px-2 py-0.5 rounded text-[11px] ${
+                                  row.delta === 0
+                                    ? 'text-slate-400 bg-slate-800/40'
+                                    : row.delta > 0
+                                    ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/50'
+                                    : 'bg-rose-950 text-rose-300 border border-rose-500/50'
+                                }`}
+                              >
+                                {row.delta > 0 ? `+${row.delta.toLocaleString()}` : row.delta.toLocaleString()}
+                              </span>
+                            ) : (
+                              <span className="text-slate-600 italic">—</span>
+                            )}
+                          </td>
+
+                          {/* % Variance */}
+                          <td className="py-2.5 px-4 text-right tabular-nums">
+                            {row.percentDelta !== null ? (
+                              <span
+                                className={`text-[11px] ${
+                                  row.percentDelta === 0
+                                    ? 'text-slate-400'
+                                    : row.percentDelta > 0
+                                    ? 'text-emerald-400 font-semibold'
+                                    : 'text-rose-400 font-semibold'
+                                }`}
+                              >
+                                {row.percentDelta > 0 ? `+${row.percentDelta}%` : `${row.percentDelta}%`}
+                              </span>
+                            ) : (
+                              <span className="text-slate-600 italic">—</span>
+                            )}
+                          </td>
+
+                          {/* Row Counts */}
+                          <td className="py-2.5 px-4 text-center tabular-nums text-slate-400 text-[11px]">
+                            <span className="text-blue-300">{row.countA}</span>
+                            <span className="mx-1 text-slate-600">/</span>
+                            <span className="text-emerald-300">{row.countB}</span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+
+                  {/* Grand Total Footer */}
+                  <tfoot className="sticky bottom-0 bg-[#081022] border-t-2 border-[#1e3668] text-slate-200 font-bold font-mono text-xs shadow-lg">
+                    <tr>
+                      <td className="py-3 px-4 uppercase tracking-wider text-[11px] text-blue-300">
+                        Grand Totals ({aggregateDiff.totalGroups} groups)
+                      </td>
+                      <td className="py-3 px-4">
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            aggregateDiff.varianceAlerts > 0
+                              ? 'bg-amber-950 text-amber-300 border border-amber-600/50'
+                              : 'bg-emerald-950 text-emerald-300 border border-emerald-600/50'
+                          }`}
+                        >
+                          {aggregateDiff.varianceAlerts > 0 ? `${aggregateDiff.varianceAlerts} Alerts` : 'Balanced'}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-right tabular-nums text-blue-300">
+                        {aggregateDiff.totalValA.toLocaleString()}
+                      </td>
+                      <td className="py-3 px-4 text-right tabular-nums text-emerald-300">
+                        {aggregateDiff.totalValB.toLocaleString()}
+                      </td>
+                      <td className="py-3 px-4 text-right tabular-nums">
+                        <span
+                          className={`inline-block px-2 py-0.5 rounded text-[11px] ${
+                            aggregateDiff.totalDelta === 0
+                              ? 'text-slate-300'
+                              : aggregateDiff.totalDelta > 0
+                              ? 'text-emerald-300 bg-emerald-950 border border-emerald-500/50'
+                              : 'text-rose-300 bg-rose-950 border border-rose-500/50'
+                          }`}
+                        >
+                          Δ {aggregateDiff.totalDelta > 0 ? `+${aggregateDiff.totalDelta.toLocaleString()}` : aggregateDiff.totalDelta.toLocaleString()}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-right tabular-nums">
+                        {aggregateDiff.percentTotalDelta !== null ? (
+                          <span
+                            className={
+                              aggregateDiff.percentTotalDelta > 0
+                                ? 'text-emerald-400'
+                                : aggregateDiff.percentTotalDelta < 0
+                                ? 'text-rose-400'
+                                : 'text-slate-300'
+                            }
+                          >
+                            {aggregateDiff.percentTotalDelta > 0 ? `+${aggregateDiff.percentTotalDelta}%` : `${aggregateDiff.percentTotalDelta}%`}
+                          </span>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-center tabular-nums text-slate-300 text-[11px]">
+                        {dataA.length} / {dataB.length}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 4: RECONCILIATION SQL */}
+        {activeTab === 'reconciliation' && (dataDiff || aggregateDiff) && (
           <div className="space-y-6 max-w-4xl mx-auto">
             <div className="bg-[#0b162f] border border-[#182c54] rounded-xl p-5 space-y-4">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h3 className="text-base font-semibold text-slate-100 flex items-center gap-2 flex-wrap">
                     <span>Auto-Generated Reconciliation SQL</span>
-                    {effectiveKeys.length > 1 && (
+                    {reconciliationType === 'row' && effectiveKeys.length > 1 && (
                       <span className="text-xs font-normal font-mono px-2 py-0.5 rounded-md bg-blue-950 text-blue-300 border border-blue-800">
                         Composite: {effectiveKeyLabel}
                       </span>
                     )}
+                    {reconciliationType === 'aggregate' && aggregateDiff && (
+                      <span className="text-xs font-normal font-mono px-2 py-0.5 rounded-md bg-emerald-950 text-emerald-300 border border-emerald-800">
+                        {aggregateDiff.measureAgg}({aggregateDiff.measureCol}) by {aggregateDiff.dimensions.join(' + ') || 'All'}
+                      </span>
+                    )}
                   </h3>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    Execute this query in the SQL Studio to inspect all discrepancy records directly in the data engine.
+                    {reconciliationType === 'row'
+                      ? 'Execute this query in the SQL Studio to inspect all modified or missing rows directly.'
+                      : 'Execute this grouped query to compare dimension totals and detect aggregated variance alerts.'}
                   </p>
                 </div>
+
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={handleCopySql}
+                    type="button"
+                    onClick={() => {
+                      const sql = reconciliationType === 'row' ? dataDiff?.reconciliationSql : aggregateDiff?.reconciliationSql;
+                      if (!sql) return;
+                      navigator.clipboard.writeText(sql);
+                      if (reconciliationType === 'row') {
+                        setCopiedSql(true);
+                        setTimeout(() => setCopiedSql(false), 2000);
+                      } else {
+                        setCopiedAggSql(true);
+                        setTimeout(() => setCopiedAggSql(false), 2000);
+                      }
+                    }}
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0e1b38] hover:bg-[#182c54] border border-[#1e3668] text-xs font-medium text-slate-200 rounded-lg transition cursor-pointer"
                   >
-                    {copiedSql ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>{copiedSql ? 'Copied!' : 'Copy SQL'}</span>
+                    {(reconciliationType === 'row' ? copiedSql : copiedAggSql) ? (
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    ) : (
+                      <Copy className="w-3.5 h-3.5" />
+                    )}
+                    <span>{(reconciliationType === 'row' ? copiedSql : copiedAggSql) ? 'Copied!' : 'Copy SQL'}</span>
                   </button>
+
                   {onExecuteQuery && (
                     <button
-                      onClick={() => onExecuteQuery(dataDiff.reconciliationSql)}
+                      type="button"
+                      onClick={() => {
+                        const sql = reconciliationType === 'row' ? dataDiff?.reconciliationSql : aggregateDiff?.reconciliationSql;
+                        if (sql) onExecuteQuery(sql);
+                      }}
                       className="flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-xs font-semibold text-white rounded-lg transition shadow-sm cursor-pointer"
                     >
                       <Play className="w-3.5 h-3.5" />
@@ -935,9 +1764,36 @@ export const SchemaDataComparator: React.FC<SchemaDataComparatorProps> = ({
                 </div>
               </div>
 
-              {/* Code display with blue keywords */}
+              {/* Toggle query type: Row Level vs Aggregate Summary */}
+              <div className="flex items-center gap-2 p-1 bg-[#070e1c] rounded-lg border border-[#182c54] w-fit text-xs">
+                <button
+                  type="button"
+                  onClick={() => setReconciliationType('row')}
+                  className={`px-3 py-1 rounded font-medium transition cursor-pointer flex items-center gap-1.5 ${
+                    reconciliationType === 'row' ? 'bg-blue-600 text-white font-bold' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <GitCompare className="w-3.5 h-3.5" />
+                  <span>Row-Level Reconciliation Query</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReconciliationType('aggregate')}
+                  className={`px-3 py-1 rounded font-medium transition cursor-pointer flex items-center gap-1.5 ${
+                    reconciliationType === 'aggregate' ? 'bg-blue-600 text-white font-bold' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <BarChart3 className="w-3.5 h-3.5" />
+                  <span>Aggregate Summary Reconciliation Query</span>
+                </button>
+              </div>
+
+              {/* Code display with syntax highlighter */}
               <div className="p-4 bg-[#070e1c] rounded-lg border border-[#182c54] font-mono text-xs whitespace-pre overflow-x-auto leading-relaxed">
-                {highlightSql(dataDiff.reconciliationSql, theme)}
+                {highlightSql(
+                  (reconciliationType === 'row' ? dataDiff?.reconciliationSql : aggregateDiff?.reconciliationSql) || '-- No query available',
+                  theme
+                )}
               </div>
             </div>
           </div>

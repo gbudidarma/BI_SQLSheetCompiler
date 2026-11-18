@@ -174,6 +174,42 @@ export interface DataDiffResult {
   columnDiscrepancies?: Record<string, number>;
 }
 
+export type AggregateFunction = 'SUM' | 'COUNT' | 'AVG' | 'MIN' | 'MAX';
+
+export interface AggregateDiffRow {
+  dimensionKey: string;
+  dimensionValues: Record<string, any>;
+  valA: number | null;
+  valB: number | null;
+  delta: number | null;
+  percentDelta: number | null;
+  countA: number;
+  countB: number;
+  status: 'balanced' | 'variance_alert' | 'only_a' | 'only_b';
+}
+
+export interface AggregateDiffResult {
+  tableAName: string;
+  tableBName: string;
+  dimensions: string[];
+  measureCol: string;
+  measureAgg: AggregateFunction;
+  tolerance: number;
+  rows: AggregateDiffRow[];
+  totalGroups: number;
+  balancedGroups: number;
+  varianceAlerts: number;
+  onlyInAGroups: number;
+  onlyInBGroups: number;
+  matchRate: number; // percentage (0-100)
+  totalValA: number;
+  totalValB: number;
+  totalDelta: number;
+  percentTotalDelta: number | null;
+  reconciliationSql: string;
+}
+
+
 // ==========================================
 // CSV Star Schema & SCD Builder Types
 // ==========================================
